@@ -532,9 +532,9 @@ void CReflector::PutDHTConfig()
 	std::ostringstream ss;
 	ss << g_Version;
 	cfg.version.assign(ss.str());
-	cfg.almod[toUType(EUrfdAlMod::nxdn)]   = g_Configure.GetString(g_Keys.nxdn.autolinkmod).at(0);
-	cfg.almod[toUType(EUrfdAlMod::p25)]    = g_Configure.GetString(g_Keys.p25.autolinkmod).at(0);
-	cfg.almod[toUType(EUrfdAlMod::ysf)]    = g_Configure.GetString(g_Keys.ysf.autolinkmod).at(0);
+	cfg.almod[toUType(EUrfdAlMod::nxdn)]   = g_Configure.GetAutolinkModule(g_Keys.nxdn.autolinkmod);
+	cfg.almod[toUType(EUrfdAlMod::p25)]    = g_Configure.GetAutolinkModule(g_Keys.p25.autolinkmod);
+	cfg.almod[toUType(EUrfdAlMod::ysf)]    = g_Configure.GetAutolinkModule(g_Keys.ysf.autolinkmod);
 	cfg.ysffreq[toUType(EUrfdTxRx::rx)]    = g_Configure.GetUnsigned(g_Keys.ysf.defaultrxfreq);
 	cfg.ysffreq[toUType(EUrfdTxRx::tx)]    = g_Configure.GetUnsigned(g_Keys.ysf.defaulttxfreq);
 	cfg.refid[toUType(EUrfdRefId::nxdn)]   = g_Configure.GetUnsigned(g_Keys.nxdn.reflectorid);

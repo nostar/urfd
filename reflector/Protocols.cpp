@@ -94,7 +94,7 @@ bool CProtocols::Init(void)
 		if (g_Configure.GetBoolean(g_Keys.usrp.enable))
 		{
 			m_Protocols.emplace_back(std::unique_ptr<CUSRPProtocol>(new CUSRPProtocol));
-			if (! m_Protocols.back()->Initialize("USRP", EProtocol::usrp, uint16_t(g_Configure.GetUnsigned(g_Keys.usrp.rxport)), USRP_IPV4, 	USRP_IPV6))
+			if (! m_Protocols.back()->Initialize("USRP", EProtocol::usrp, uint16_t(g_Configure.GetUnsigned(g_Keys.usrp.rxport)), USRP_IPV4, USRP_IPV6))
 				return false;
 		}
 

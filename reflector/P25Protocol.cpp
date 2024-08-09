@@ -122,7 +122,7 @@ void CP25Protocol::Task(void)
 					auto newclient = std::make_shared<CP25Client>(Callsign, Ip);
 
 					// aautolink, if enabled
-					if (m_AutolinkModule)
+					if (' ' != m_AutolinkModule)
 						newclient->SetReflectorModule(m_AutolinkModule);
 
 					// and append

@@ -164,7 +164,7 @@ void CYsfProtocol::Task(void)
 					auto newclient = std::make_shared<CYsfClient>(Callsign, Ip);
 
 					// aautolink, if enabled
-					if (m_AutolinkModule)
+					if (' ' != m_AutolinkModule)
 						newclient->SetReflectorModule(m_AutolinkModule);
 
 					// and append

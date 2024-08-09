@@ -35,7 +35,7 @@ UninstallReflector () {
 }
 
 InstallReflector () {
-	if [ "$tcaddress" != none ]; then
+	if [ "$tcport" != 0 ]; then
 		pushd ../tcd
 		sudo make install || read -p "<Enter> to continue: " ans
 		popd
@@ -63,22 +63,19 @@ InstallReflector () {
 urfserv='/etc/systemd/system/urfd.service'
 tcdserv='/etc/systemd/system/tcd.service'
 
-# default values, we only need a few
-tcaddress='none'
-
 if [[ $# -eq 1 ]]; then
 	if [ -e $1 ]; then
 		echo $1 found
-		callsign=$(awk '$1 == "Callsign"{print $3}' $1)
-		tcaddress=$(awk '$1 == "Transcoder"{print $3}' $1)
+		callsign=$(awk '$1 == "Callsign"{print $3; exit}' $1)
+		tcport=$(awk '$1 == "Port"{print $3; exit}' $1)
 	else
 		echo "$1 not found"
 		exit 1
 	fi
 else
 	if [[ -e reflector/urfd.ini ]]; then
-		callsign=$(awk '$1 == "Callsign"{print $3}' reflector/urfd.ini)
-		tcaddress=$(awk '$1 == "Transcoder"{print $3}' reflector/urfd.ini)
+		callsign=$(awk '$1 == "Callsign"{print $3; exit}' reflector/urfd.ini)
+		tcport=$(awk '$1 == "Port"{print $3; exit}' reflector/urfd.ini)
 	else
 		echo "ERROR: could not find reflector/urfd.ini! You'll have to specify it."
 		echo "Usage: ./radmin PATH-TO-INI-FILE"
@@ -97,7 +94,7 @@ do
 		ps -aux | grep -e urfd -e tcd | grep -v grep | grep -v radmin
 	fi
 	echo
-	echo "        Reflector Administration, Version #230308"
+	echo "        Reflector Administration, Version #240808"
 	echo
 	git status | head -1
 	echo
@@ -116,13 +113,17 @@ do
 	else
 		if [[ "$callsign" == URF* ]]; then
 			if [ -e reflector/urfd ]; then
-				if [[ "$tcaddress" == none ]]; then
+				if [[ "$tcport" == 0 ]]; then
 					echo "is : Install URF reflector without transcoder"
 				else
 					if [ -e ../tcd/tcd ]; then
 						echo "is : Install URF reflector and transcoder"
+					else
+						echo "HELP! Transcoder port is set, but tcd executable not found!"
 					fi
 				fi
+			else
+				echo "HELP! urfd executable not found!"
 			fi
 		fi
 	fi

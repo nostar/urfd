@@ -62,7 +62,7 @@ CURLcode CCurlGet::GetURL(const std::string &url, std::stringstream &ss, long ti
 	}
 	if (code != CURLE_OK)
 	{
-		std::cout << "ERROR: was not able retrieve data at '" << url << "'\nCurl returned: " << code << std::endl;
+		std::cout << "WARNING: was not able retrieve data at '" << url << "'\nCurl returned: " << code << std::endl;
 	}
 	return code;
 }
