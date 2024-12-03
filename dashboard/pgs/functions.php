@@ -17,6 +17,10 @@ function ParseTime($Input) {
        $Input = substr($Input, 0, strpos($Input, "<"));
     }
     
+    if (strpos($Input, "T") !== false) {
+        return strtotime($Input);
+    }
+
     // Tuesday Tue Nov 17 14:23:22 2015
     $tmp  = explode(" ", $Input);
     if (strlen(trim($tmp[3])) == 0) {
