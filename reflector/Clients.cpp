@@ -43,14 +43,11 @@ CClients::~CClients()
 void CClients::AddClient(std::shared_ptr<CClient> client)
 {
 	// first check if client already exists
-	for ( auto it=begin(); it!=end(); it++ )
+	for ( auto it=m_Clients.begin(); it!=m_Clients.end(); it++ )
 	{
 		if (*client == *(*it))
-			// if found, just do nothing
-			// so *client keep pointing on a valid object
-			// on function return
 		{
-			// delete new one
+			// if found, just do nothing
 			return;
 		}
 	}
@@ -63,13 +60,21 @@ void CClients::AddClient(std::shared_ptr<CClient> client)
 		std::cout << " on module " << client->GetReflectorModule();
 	}
 	std::cout << std::endl;
+
+    // dashboard event
+    nlohmann::json event;
+    event["type"] = "client_connect";
+    event["callsign"] = client->GetCallsign().GetCS();
+    event["ip"] = client->GetIp().GetAddress();
+    event["protocol"] = client->GetProtocolName();
+    event["module"] = std::string(1, client->GetReflectorModule());
+    g_NNGPublisher.Publish(event);
 }
 
 void CClients::RemoveClient(std::shared_ptr<CClient> client)
 {
 	// look for the client
-	bool found = false;
-	for ( auto it=begin(); it!=end(); it++ )
+	for ( auto it=m_Clients.begin(); it!=m_Clients.end(); it++ )
 	{
 		// compare object pointers
 		if ( *it == client )
@@ -84,6 +89,16 @@ void CClients::RemoveClient(std::shared_ptr<CClient> client)
 					std::cout << " on module " << (*it)->GetReflectorModule();
 				}
 				std::cout << std::endl;
+
+                // dashboard event
+                nlohmann::json event;
+                event["type"] = "client_disconnect";
+                event["callsign"] = (*it)->GetCallsign().GetCS();
+                event["ip"] = (*it)->GetIp().GetAddress();
+                event["protocol"] = (*it)->GetProtocolName();
+                event["module"] = std::string(1, (*it)->GetReflectorModule());
+                g_NNGPublisher.Publish(event);
+
 				m_Clients.erase(it);
 				break;
 			}
