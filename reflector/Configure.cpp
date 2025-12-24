@@ -1010,8 +1010,8 @@ unsigned CConfigure::GetUnsigned(const std::string &key) const
 
 bool CConfigure::GetBoolean(const std::string &key) const
 {
-	if (data[key].is_boolean())
-		return data[key];
+	if (data.contains(key) && data[key].is_boolean())
+		return data[key].get<bool>();
 	else
 		return false;
 }
