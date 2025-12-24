@@ -38,6 +38,7 @@
 #define JBRANDMEISTER            "Brandmeister"
 #define JCALLSIGN                "Callsign"
 #define JCOUNTRY                 "Country"
+#define JDASHBOARD               "Dashboard"
 #define JDASHBOARDURL            "DashboardUrl"
 #define JDCS                     "DCS"
 #define JDEFAULTID               "DefaultId"
@@ -124,6 +125,9 @@ CConfigure::CConfigure()
 {
 	IPv4RegEx = std::regex("^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3,3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]){1,1}$", std::regex::extended);
 	IPv6RegEx = std::regex("^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}(:[0-9a-fA-F]{1,4}){1,1}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}|:((:[0-9a-fA-F]{1,4}){1,7}|:))$", std::regex::extended);
+
+	data[g_Keys.dashboard.nngaddr] = "tcp://127.0.0.1:5555";
+	data[g_Keys.dashboard.enable] = false;
 }
 
 bool CConfigure::ReadData(const std::string &path)
@@ -185,6 +189,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::ip;
 			else if (0 == hname.compare(JTRANSCODER))
 				section = ESection::tc;
+			else if (0 == hname.compare(JDASHBOARD))
+				section = ESection::dashboard;
 			else if (0 == hname.compare(JMODULES))
 				section = ESection::modules;
 			else if (0 == hname.compare(JDPLUS))
@@ -509,6 +515,14 @@ bool CConfigure::ReadData(const std::string &path)
 				else
 					badParam(key);
 				break;
+			case ESection::dashboard:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.dashboard.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare("NNGAddr"))
+					data[g_Keys.dashboard.nngaddr] = value;
+				else
+					badParam(key);
+				break;
 			default:
 				std::cout << "WARNING: parameter '" << line << "' defined before any [section]" << std::endl;
 		}
@@ -812,6 +826,9 @@ bool CConfigure::ReadData(const std::string &path)
 		if (isDefined(ErrorLevel::fatal, JFILES, JG3TERMINALPATH, g_Keys.files.terminal, rval))
 			checkFile(JFILES, JG3TERMINALPATH, data[g_Keys.files.terminal]);
 	}
+	// Dashboard section
+	isDefined(ErrorLevel::mild, JDASHBOARD, JENABLE, g_Keys.dashboard.enable, rval);
+	isDefined(ErrorLevel::mild, JDASHBOARD, "NNGAddr", g_Keys.dashboard.nngaddr, rval);
 
 	return rval;
 }

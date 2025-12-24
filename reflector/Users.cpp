@@ -64,4 +64,14 @@ void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign
 	}
 
 	AddUser(heard);
+
+    // dashboard event
+    nlohmann::json event;
+    event["type"] = "hearing";
+    event["my"] = my.GetCS();
+    event["ur"] = rpt1.GetCS();
+    event["rpt1"] = rpt2.GetCS();
+    event["rpt2"] = xlx.GetCS();
+    event["module"] = std::string(1, xlx.GetCSModule());
+    g_NNGPublisher.Publish(event);
 }
