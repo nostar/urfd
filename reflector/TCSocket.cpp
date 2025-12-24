@@ -185,6 +185,7 @@ bool CTCServer::Receive(char module, STCPacket *packet, int ms)
 	auto pfds = &m_Pfd[pos];
 	if (pfds->fd < 0)
 	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 		return rv;
 	}
 
@@ -287,7 +288,7 @@ bool CTCServer::Accept()
 			wmod.append(1, c);
 	}
 
-	std::cout << "Waiting at " << m_Ip << " for transcoder connection";
+	std::cout << "Checking " << m_Ip << " for transcoder connection";
 	if (wmod.size() > 1)
 	{
 		std::cout << "s for modules ";
@@ -298,8 +299,23 @@ bool CTCServer::Accept()
 	}
 	std::cout << wmod << "..." << std::endl;
 
+	struct pollfd pfd;
+	pfd.fd = fd;
+	pfd.events = POLLIN;
+
 	while (AnyAreClosed())
 	{
+		auto p = poll(&pfd, 1, 100); // 100ms timeout
+		if (p < 0)
+		{
+			perror("Accept poll");
+			close(fd);
+			Close();
+			return true;
+		}
+		if (0 == p)
+			break; // No more pending connections for now
+
 		if (acceptone(fd))
 		{
 			close(fd);
