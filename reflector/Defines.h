@@ -66,7 +66,7 @@
 
 // protocols ---------------------------------------------------
 
-enum class EProtocol { any, none, dextra, dplus, dcs, g3, bm, urf, dmrplus, dmrmmdvm, nxdn, p25, usrp, ysf, m17 };
+enum class EProtocol { any, none, dextra, dplus, dcs, g3, imrs, bm, urf, dmrplus, dmrmmdvm, nxdn, p25, usrp, ysf, m17 };
 
 // DExtra
 #define DEXTRA_KEEPALIVE_PERIOD         3                                   // in seconds
@@ -129,6 +129,12 @@ enum class EProtocol { any, none, dextra, dplus, dcs, g3, bm, urf, dmrplus, dmrm
 #define G3_DV_PORT                      40000                               // UDP port
 #define G3_KEEPALIVE_PERIOD             10                                  // in seconds
 #define G3_KEEPALIVE_TIMEOUT            3600                                // in seconds, 1 hour
+
+// IMRS
+#define IMRS_PORT                       21110                               // UDP port
+#define IMRS_KEEPALIVE_PERIOD           30                                  // in seconds
+#define IMRS_KEEPALIVE_TIMEOUT          (IMRS_KEEPALIVE_PERIOD*5)           // in seconds
+#define IMRS_DEFAULT_MODULE             'B'                                 // default module to link in
 
 
 ////////////////////////////////////////////////////////////////////////////////////////

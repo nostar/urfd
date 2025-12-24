@@ -30,6 +30,7 @@
 #include "NXDNProtocol.h"
 #include "USRPProtocol.h"
 #include "G3Protocol.h"
+#include "ImrsProtocol.h"
 #include "Protocols.h"
 #include "Global.h"
 
@@ -107,6 +108,13 @@ bool CProtocols::Init(void)
 			m_Protocols.emplace_back(std::unique_ptr<CG3Protocol>(new CG3Protocol));
 			if (! m_Protocols.back()->Initialize("XLX", EProtocol::g3, G3_DV_PORT, DMR_IPV4, DMR_IPV6))
 			return false;
+		}
+
+		if (g_Configure.GetBoolean(g_Keys.imrs.enable))
+		{
+			m_Protocols.emplace_back(std::unique_ptr<CImrsProtocol>(new CImrsProtocol));
+			if (! m_Protocols.back()->Initialize("IMRS", EProtocol::imrs, uint16_t(g_Configure.GetUnsigned(g_Keys.imrs.port)), DSTAR_IPV4, DSTAR_IPV6))
+				return false;
 		}
 
 	}

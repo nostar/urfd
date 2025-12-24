@@ -58,6 +58,7 @@
 #define JIPADDRESSES             "IP Addresses"
 #define JIPV4BINDING             "IPv4Binding"
 #define JIPV4EXTERNAL            "IPv4External"
+#define JIMRS                   "IMRS"
 #define JIPV6BINDING             "IPv6Binding"
 #define JIPV6EXTERNAL            "IPv6External"
 #define JJSONPATH                "JsonPath"
@@ -191,6 +192,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::dextra;
 			else if (0 == hname.compare(JG3))
 				section = ESection::g3;
+			else if (0 == hname.compare(JIMRS))
+				section = ESection::imrs;
 			else if (0 == hname.compare(JDMRPLUS))
 				section = ESection::dmrplus;
 			else if (0 == hname.compare(JMMDVM))
@@ -350,6 +353,14 @@ bool CConfigure::ReadData(const std::string &path)
 			case ESection::g3:
 				if (0 == key.compare(JENABLE))
 					data[g_Keys.g3.enable] = IS_TRUE(value[0]);
+				else
+					badParam(key);
+				break;
+			case ESection::imrs:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.imrs.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare(JPORT))
+					data[g_Keys.imrs.port] = getUnsigned(value, "IMRS Port", 1024, 65535, 21110);
 				else
 					badParam(key);
 				break;

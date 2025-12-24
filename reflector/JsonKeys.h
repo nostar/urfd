@@ -36,6 +36,9 @@ struct SJsonKeys {
 	struct BM { const std::string enable, port; }
 	bm { "bmEnable", "bmPort" };
 
+	struct IMRS { const std::string enable, port; }
+	imrs { "IMRSEnable", "IMRSPort" };
+
 	struct MMDVM { const std::string port, defaultid; }
 	mmdvm { "MMDVMPort", "mmdvmdefaultid" };
 
