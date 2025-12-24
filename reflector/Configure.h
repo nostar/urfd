@@ -25,7 +25,7 @@
 
 enum class ErrorLevel { fatal, mild };
 enum class ERefreshType { file, http, both };
-enum class ESection { none, names, ip, modules, urf, dplus, dextra, dcs, g3, dmrplus, mmdvm, nxdn, bm, ysf, p25, m17, usrp, dmrid, nxdnid, ysffreq, files, tc };
+enum class ESection { none, names, ip, modules, urf, dplus, dextra, dcs, g3, imrs, dmrplus, mmdvm, nxdn, bm, ysf, p25, m17, usrp, dmrid, nxdnid, ysffreq, files, tc };
 
 #define IS_TRUE(a) ((a)=='t' || (a)=='T' || (a)=='1')
 
