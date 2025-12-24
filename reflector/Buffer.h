@@ -48,8 +48,8 @@ public:
 	void ReplaceAt(int, const uint8_t *, int);
 
 	// operation
-	int Compare(uint8_t *, int) const;
-	int Compare(uint8_t *, int, int) const;
+	int Compare(const uint8_t *, int) const;
+	int Compare(const uint8_t *, int, int) const;
 
 	// operator
 	bool operator ==(const CBuffer &) const;

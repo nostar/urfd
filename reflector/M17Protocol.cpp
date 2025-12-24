@@ -1,5 +1,5 @@
 //  Copyright © 2015 Jean-Luc Deltombe (LX3JL). All rights reserved.
-
+//
 // urfd -- The universal reflector
 // Copyright © 2021 Thomas A. Early N7TAE
 //
@@ -20,8 +20,17 @@
 #include <string.h>
 #include "M17Client.h"
 #include "M17Protocol.h"
+#include "M17Parrot.h"
 #include "M17Packet.h"
 #include "Global.h"
+
+////////////////////////////////////////////////////////////////////////////////////////
+// constructors
+
+CM17Protocol::CM17Protocol()
+	: CSEProtocol()
+{
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // operation
@@ -39,8 +48,6 @@ bool CM17Protocol::Initialize(const char *type, const EProtocol ptype, const uin
 	return true;
 }
 
-
-
 ////////////////////////////////////////////////////////////////////////////////////////
 // task
 
@@ -49,6 +56,7 @@ void CM17Protocol::Task(void)
 	CBuffer   Buffer;
 	CIp       Ip;
 	CCallsign Callsign;
+	CCallsign DstCallsign;
 	char      ToLinkModule;
 	std::unique_ptr<CDvHeaderPacket> Header;
 	std::unique_ptr<CDvFramePacket>  Frame;
@@ -67,8 +75,24 @@ void CM17Protocol::Task(void)
 		// crack the packet
 		if ( IsValidDvPacket(Buffer, Header, Frame) )
 		{
+			// find client
+			std::shared_ptr<CClient> client = g_Reflector.GetClients()->FindClient(Ip, EProtocol::m17);
+			bool isListen = false;
+			if (client)
+			{
+				auto m17client = std::dynamic_pointer_cast<CM17Client>(client);
+				if (m17client && m17client->IsListenOnly())
+					isListen = true;
+			}
+			g_Reflector.ReleaseClients();
+
+			// parrot?
+            if ( Header->GetUrCallsign() == "PARROT" )
+            {
+                HandleParrot(Ip, Buffer, true);
+            }
 			// callsign muted?
-			if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::m17, Header->GetRpt2Module()) )
+			else if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::m17, Header->GetRpt2Module()) )
 			{
 				OnDvHeaderPacketIn(Header, Ip);
 
@@ -85,9 +109,10 @@ void CM17Protocol::Task(void)
 				OnDvFramePacketIn(secondFrame, &Ip); // push two packet because we need a packet every 20 ms
 			}
 		}
-		else if ( IsValidConnectPacket(Buffer, Callsign, ToLinkModule) )
+		else if ( IsValidConnectPacket(Buffer, Callsign, ToLinkModule) || IsValidListenPacket(Buffer, Callsign, ToLinkModule) )
 		{
-			std::cout << "M17 connect packet for module " << ToLinkModule << " from " << Callsign << " at " << Ip << std::endl;
+			bool isListen = (0 == Buffer.Compare((const uint8_t*)"LSTN", 4));
+			std::cout << "M17 " << (isListen ? "listen-only " : "") << "connect packet for module " << ToLinkModule << " from " << Callsign << " at " << Ip << std::endl;
 
 			// callsign authorized?
 			if ( g_GateKeeper.MayLink(Callsign, Ip, EProtocol::m17) && g_Reflector.IsValidModule(ToLinkModule) )
@@ -99,7 +124,7 @@ void CM17Protocol::Task(void)
 					Send("ACKN", Ip);
 
 					// create the client and append
-					g_Reflector.GetClients()->AddClient(std::make_shared<CM17Client>(Callsign, Ip, ToLinkModule));
+					g_Reflector.GetClients()->AddClient(std::make_shared<CM17Client>(Callsign, Ip, ToLinkModule, isListen));
 					g_Reflector.ReleaseClients();
 				}
 				else
@@ -145,6 +170,44 @@ void CM17Protocol::Task(void)
 			}
 			g_Reflector.ReleaseClients();
 		}
+		else if ( IsValidPacketModePacket(Buffer, Callsign, DstCallsign) )
+		{
+			// find client
+			std::shared_ptr<CClient> client = g_Reflector.GetClients()->FindClient(Ip, EProtocol::m17);
+			bool isListen = false;
+			if (client)
+			{
+				auto m17client = std::dynamic_pointer_cast<CM17Client>(client);
+				if (m17client && m17client->IsListenOnly())
+					isListen = true;
+			}
+			g_Reflector.ReleaseClients();
+
+			if (!isListen)
+			{
+                // parrot?
+                if ( DstCallsign == "PARROT" )
+                {
+                    HandleParrot(Ip, Buffer, false);
+                }
+				// repeat to all clients on the module
+				else if (client)
+				{
+					char module = client->GetReflectorModule();
+					CClients *clients = g_Reflector.GetClients();
+					auto it = clients->begin();
+					std::shared_ptr<CClient> target = nullptr;
+					while ( (target = clients->FindNextClient(EProtocol::m17, it)) != nullptr )
+					{
+						if (target->GetReflectorModule() == module && target->GetIp() != Ip)
+						{
+							Send(Buffer, target->GetIp());
+						}
+					}
+					g_Reflector.ReleaseClients();
+				}
+			}
+		}
 		else
 		{
 			// invalid packet
@@ -169,6 +232,24 @@ void CM17Protocol::Task(void)
 		// update time
 		m_LastKeepaliveTime.start();
 	}
+
+    // Handle Parrot timeouts and cleanup
+    for (auto it = m_ParrotMap.begin(); it != m_ParrotMap.end(); )
+    {
+        if (it->second->GetState() == EParrotState::record && it->second->IsExpired())
+        {
+            it->second->Play();
+            it++;
+        }
+        else if (it->second->GetState() == EParrotState::done)
+        {
+            it = m_ParrotMap.erase(it);
+        }
+        else
+        {
+            it++;
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -326,6 +407,19 @@ bool CM17Protocol::IsValidConnectPacket(const CBuffer &Buffer, CCallsign &callsi
 	return valid;
 }
 
+bool CM17Protocol::IsValidListenPacket(const CBuffer &Buffer, CCallsign &callsign, char &mod)
+{
+	uint8_t tag[] = { 'L', 'S', 'T', 'N' };
+	bool valid = false;
+	if (11 == Buffer.size() && 0 == Buffer.Compare(tag, 4))
+	{
+		callsign.CodeIn(Buffer.data() + 4);
+		mod = Buffer.data()[10];
+		valid = (callsign.IsValid() && IsLetter(mod));
+	}
+	return valid;
+}
+
 bool CM17Protocol::IsValidDisconnectPacket(const CBuffer &Buffer, CCallsign &callsign)
 {
 	uint8_t tag[] = { 'D', 'I', 'S', 'C' };
@@ -340,14 +434,28 @@ bool CM17Protocol::IsValidDisconnectPacket(const CBuffer &Buffer, CCallsign &cal
 
 bool CM17Protocol::IsValidKeepAlivePacket(const CBuffer &Buffer, CCallsign &callsign)
 {
-	uint8_t tag[] = { 'P', 'O', 'N', 'G' };
 	bool valid = false;
-	if ( (Buffer.size() == 10) || (0 == Buffer.Compare(tag, 4)) )
+	if (Buffer.size() == 10)
 	{
-		callsign.CodeIn(Buffer.data() + 4);
-		valid = callsign.IsValid();
+		if (0 == Buffer.Compare((const uint8_t*)"PING", 4) || 0 == Buffer.Compare((const uint8_t*)"PONG", 4))
+		{
+			callsign.CodeIn(Buffer.data() + 4);
+			valid = callsign.IsValid();
+		}
 	}
 	return valid;
+}
+
+bool CM17Protocol::IsValidPacketModePacket(const CBuffer &Buffer, CCallsign &src, CCallsign &dst)
+{
+	uint8_t tag[] = { 'M', '1', '7', 'P' };
+	if ( (Buffer.size() >= 18) && (0 == Buffer.Compare(tag, 4)) )
+	{
+		dst.CodeIn(Buffer.data() + 4);
+		src.CodeIn(Buffer.data() + 10);
+		return (src.IsValid() && (0x0U == (0x1U & Buffer[17]))); // no encryption
+	}
+	return false;
 }
 
 bool CM17Protocol::IsValidDvPacket(const CBuffer &Buffer, std::unique_ptr<CDvHeaderPacket> &header, std::unique_ptr<CDvFramePacket> &frame)
@@ -355,11 +463,6 @@ bool CM17Protocol::IsValidDvPacket(const CBuffer &Buffer, std::unique_ptr<CDvHea
 	uint8_t tag[] = { 'M', '1', '7', ' ' };
 
 	if ( (Buffer.size() == sizeof(SM17Frame)) && (0 == Buffer.Compare(tag, sizeof(tag))) && (0x4U == (0x1CU & Buffer[19])) )
-	// Buffer[19] is the low-order byte of the uint16_t frametype.
-	// the 0x1CU mask (00011100 binary) just lets us see:
-	// 1. the encryptions bytes (mask 0x18U) which must be zero, and
-	// 2. the msb of the 2-bit payload type (mask 0x4U) which must be set. This bit set means it's voice or voice+data.
-	// An masked result of 0x4U means the payload contains Codec2 voice data and there is no encryption.
 	{
 		// Make the M17 header
 		CM17Packet m17(Buffer.data());
@@ -410,4 +513,64 @@ void CM17Protocol::EncodeM17Packet(SM17Frame &frame, const CDvHeaderPacket &Head
 	memcpy(frame.payload, DvFrame->GetCodecData(ECodecType::c2_3200), 16);
 	frame.streamid = Header.GetStreamId();	// no host<--->network byte swapping since we never do any math on this value
 	// the CRC will be set in HandleQueue, after lich.dest is set
+}
+
+bool CM17Protocol::EncodeDvHeaderPacket(const CDvHeaderPacket &Header, CBuffer &Buffer) const
+{
+    (void)Header;
+    (void)Buffer;
+    return false; // M17 uses EncodeM17Packet
+}
+
+bool CM17Protocol::EncodeDvFramePacket(const CDvFramePacket &Frame, CBuffer &Buffer) const
+{
+    (void)Frame;
+    (void)Buffer;
+    return false; // M17 uses EncodeM17Packet
+}
+
+void CM17Protocol::HandleParrot(const CIp &Ip, const CBuffer &Buffer, bool isStream)
+{
+    std::string key = Ip.GetAddress();
+    auto it = m_ParrotMap.find(key);
+    
+    if (it == m_ParrotMap.end())
+    {
+        std::shared_ptr<CClient> client = g_Reflector.GetClients()->FindClient(Ip, EProtocol::m17);
+        auto m17client = std::dynamic_pointer_cast<CM17Client>(client);
+        g_Reflector.ReleaseClients();
+        
+        if (m17client)
+        {
+            if (isStream)
+            {
+                // Extract frametype from SM17Frame
+                uint16_t ft = (Buffer.data()[12] << 8) | Buffer.data()[13];
+                m_ParrotMap[key] = std::make_shared<CM17StreamParrot>(m17client->GetCallsign(), m17client, ft, this);
+            }
+            else
+            {
+                // Extract frametype from SM17P (lich part starts at offset 4, but frametype is at offset 16)
+                uint16_t ft = (Buffer.data()[16] << 8) | Buffer.data()[17];
+                m_ParrotMap[key] = std::make_shared<CM17PacketParrot>(m17client->GetCallsign(), m17client, ft, this);
+            }
+        }
+    }
+    
+    it = m_ParrotMap.find(key);
+    if (it != m_ParrotMap.end() && it->second->GetState() == EParrotState::record)
+    {
+        if (isStream)
+        {
+            // streamId at offset 4, fn at 38
+            uint16_t sid = (Buffer.data()[4] << 8) | Buffer.data()[5];
+            uint16_t fn = (Buffer.data()[38] << 8) | Buffer.data()[39];
+            it->second->Add(Buffer, sid, fn);
+        }
+        else
+        {
+            it->second->AddPacket(Buffer);
+            it->second->Play(); // Packet mode parrot plays back immediately
+        }
+    }
 }

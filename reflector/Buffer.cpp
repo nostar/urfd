@@ -124,7 +124,7 @@ void CBuffer::ReplaceAt(int i, const uint8_t *ptr, int len)
 ////////////////////////////////////////////////////////////////////////////////////////
 // operation
 
-int CBuffer::Compare(uint8_t *buffer, int len) const
+int CBuffer::Compare(const uint8_t *buffer, int len) const
 {
 	int result = -1;
 	if ( m_data.size() >= unsigned(len) )
@@ -134,7 +134,7 @@ int CBuffer::Compare(uint8_t *buffer, int len) const
 	return result;
 }
 
-int CBuffer::Compare(uint8_t *buffer, int off, int len) const
+int CBuffer::Compare(const uint8_t *buffer, int off, int len) const
 {
 	int result = -1;
 	if ( m_data.size() >= unsigned(off+len) )
