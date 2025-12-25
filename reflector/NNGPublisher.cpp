@@ -49,9 +49,16 @@ void CNNGPublisher::Publish(const nlohmann::json &event)
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_started) return;
 
+    if (m_sock.id == 0) {
+        std::cerr << "NNG debug: Cannot publish, socket not initialized." << std::endl;
+        return;
+    }
     std::string msg = event.dump();
+    std::cout << "NNG debug: Attempting to publish message of size " << msg.size() << ": " << msg << std::endl;
     int rv = nng_send(m_sock, (void *)msg.c_str(), msg.size(), NNG_FLAG_NONBLOCK);
-    if (rv != 0 && rv != NNG_EAGAIN) {
+    if (rv == 0) {
+        std::cout << "NNG: Published event: " << event["type"] << std::endl;
+    } else if (rv != NNG_EAGAIN) {
         std::cerr << "NNG: Send error: " << nng_strerror(rv) << std::endl;
     }
 }

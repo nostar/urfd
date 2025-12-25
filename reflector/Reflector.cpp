@@ -340,9 +340,13 @@ void CReflector::MaintenanceThread()
 	if (g_Configure.Contains(g_Keys.files.json))
 		jsonpath.assign(g_Configure.GetString(g_Keys.files.json));
 	auto tcport = g_Configure.GetUnsigned(g_Keys.tc.port);
-
-	if (xmlpath.empty() && jsonpath.empty())
+	if (xmlpath.empty() && jsonpath.empty() && !g_Configure.GetBoolean(g_Keys.dashboard.enable))
+	{
 		return;	// nothing to do
+	}
+
+	unsigned int nngInterval = g_Configure.GetUnsigned(g_Keys.dashboard.interval);
+	unsigned int nngCounter = 0;
 
 	while (keep_running)
 	{
@@ -383,6 +387,20 @@ void CReflector::MaintenanceThread()
 		// and wait a bit and do something useful at the same time
 		for (int i=0; i< XML_UPDATE_PERIOD*10 && keep_running; i++)
 		{
+			// NNG periodic state update
+			if (g_Configure.GetBoolean(g_Keys.dashboard.enable))
+			{
+				if (++nngCounter >= (nngInterval * 10))
+				{
+					nngCounter = 0;
+					std::cout << "NNG debug: Periodic state broadcast..." << std::endl;
+					nlohmann::json state;
+					state["type"] = "state";
+					JsonReport(state);
+					g_NNGPublisher.Publish(state);
+				}
+			}
+
 			if (tcport && g_TCServer.AnyAreClosed())
 			{
 				if (g_TCServer.Accept())
@@ -391,6 +409,7 @@ void CReflector::MaintenanceThread()
 					abort();
 				}
 			}
+
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
@@ -406,6 +425,16 @@ std::shared_ptr<CPacketStream> CReflector::GetStream(char module)
 		return it->second;
 
 	return nullptr;
+}
+
+bool CReflector::IsAnyStreamOpen()
+{
+	for (auto it=m_Stream.begin(); it!=m_Stream.end(); it++)
+	{
+		if ( it->second->IsOpen() )
+			return true;
+	}
+	return false;
 }
 
 bool CReflector::IsStreamOpen(const std::unique_ptr<CDvHeaderPacket> &DvHeader)
@@ -456,6 +485,18 @@ void CReflector::JsonReport(nlohmann::json &report)
 	for (auto uid=users->begin(); uid!=users->end(); uid++)
 		(*uid).JsonReport(report);
 	ReleaseUsers();
+
+	report["ActiveTalkers"] = nlohmann::json::array();
+	for (auto const& [module, stream] : m_Stream)
+	{
+		if (stream->IsOpen())
+		{
+			nlohmann::json jactive;
+			jactive["Module"] = std::string(1, module);
+			jactive["Callsign"] = stream->GetUserCallsign().GetCS();
+			report["ActiveTalkers"].push_back(jactive);
+		}
+	}
 }
 
 void CReflector::WriteXmlFile(std::ofstream &xmlFile)
