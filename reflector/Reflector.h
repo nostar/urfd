@@ -92,6 +92,7 @@ protected:
 
 	// streams
 	std::shared_ptr<CPacketStream> GetStream(char);
+	bool IsAnyStreamOpen(void);
 	bool IsStreamOpen(const std::unique_ptr<CDvHeaderPacket> &);
 	char GetStreamModule(std::shared_ptr<CPacketStream>);
 

@@ -127,7 +127,9 @@ CConfigure::CConfigure()
 	IPv6RegEx = std::regex("^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}(:[0-9a-fA-F]{1,4}){1,1}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}|:((:[0-9a-fA-F]{1,4}){1,7}|:))$", std::regex::extended);
 
 	data[g_Keys.dashboard.nngaddr] = "tcp://127.0.0.1:5555";
+	data[g_Keys.dashboard.interval] = 10U;
 	data[g_Keys.dashboard.enable] = false;
+	data[g_Keys.ysf.ysfreflectordb.id] = 0U;
 }
 
 bool CConfigure::ReadData(const std::string &path)
@@ -520,6 +522,8 @@ bool CConfigure::ReadData(const std::string &path)
 					data[g_Keys.dashboard.enable] = IS_TRUE(value[0]);
 				else if (0 == key.compare("NNGAddr"))
 					data[g_Keys.dashboard.nngaddr] = value;
+				else if (0 == key.compare("Interval"))
+					data[g_Keys.dashboard.interval] = getUnsigned(value, "Dashboard Interval", 1, 3600, 10);
 				else
 					badParam(key);
 				break;
@@ -829,6 +833,7 @@ bool CConfigure::ReadData(const std::string &path)
 	// Dashboard section
 	isDefined(ErrorLevel::mild, JDASHBOARD, JENABLE, g_Keys.dashboard.enable, rval);
 	isDefined(ErrorLevel::mild, JDASHBOARD, "NNGAddr", g_Keys.dashboard.nngaddr, rval);
+	isDefined(ErrorLevel::mild, JDASHBOARD, "Interval", g_Keys.dashboard.interval, rval);
 
 	return rval;
 }

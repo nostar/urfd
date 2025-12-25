@@ -75,6 +75,6 @@ struct SJsonKeys {
 	struct FILES { const std::string pid, xml, json, white, black, interlink, terminal; }
 	files { "pidFilePath", "xmlFilePath", "jsonFilePath", "whitelistFilePath", "blacklistFilePath", "interlinkFilePath", "g3TerminalFilePath" };
 
-	struct DASHBOARD { const std::string enable, nngaddr; }
-	dashboard { "DashboardEnable", "DashboardNNGAddr" };
+	struct DASHBOARD { const std::string enable, nngaddr, interval; }
+	dashboard { "DashboardEnable", "DashboardNNGAddr", "DashboardInterval" };
 };
