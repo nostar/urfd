@@ -1,4 +1,5 @@
 #include "NNGPublisher.h"
+#include "Global.h"
 #include <iostream>
 
 CNNGPublisher::CNNGPublisher()
@@ -54,7 +55,8 @@ void CNNGPublisher::Publish(const nlohmann::json &event)
         return;
     }
     std::string msg = event.dump();
-    std::cout << "NNG debug: Attempting to publish message of size " << msg.size() << ": " << msg << std::endl;
+    if (g_Configure.GetBoolean(g_Keys.dashboard.debug))
+        std::cout << "NNG debug: Attempting to publish message of size " << msg.size() << ": " << msg << std::endl;
     int rv = nng_send(m_sock, (void *)msg.c_str(), msg.size(), NNG_FLAG_NONBLOCK);
     if (rv == 0) {
         std::cout << "NNG: Published event: " << event["type"] << std::endl;
