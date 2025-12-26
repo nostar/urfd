@@ -335,7 +335,7 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 		// update last heard
 		if ( lastheard )
 		{
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::dmrmmdvm);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::dmrmmdvm);
 			g_Reflector.ReleaseUsers();
 		}
 	}

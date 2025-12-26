@@ -293,7 +293,7 @@ void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		// update last heard
 		if ( g_Reflector.IsValidModule(rpt2.GetCSModule()) )
 		{
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::ysf);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::ysf);
 			g_Reflector.ReleaseUsers();
 		}
 	}

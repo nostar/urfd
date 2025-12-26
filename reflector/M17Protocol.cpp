@@ -209,7 +209,9 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::m17);
+        CCallsign reflectorCall = rpt2;
+        reflectorCall.SetCSModule(Header->GetRpt2Module());
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, reflectorCall, EProtocol::m17);
 		g_Reflector.ReleaseUsers();
 	}
 }

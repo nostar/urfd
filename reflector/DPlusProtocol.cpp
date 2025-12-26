@@ -213,7 +213,7 @@ void CDplusProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header
 			g_Reflector.ReleaseClients();
 
 			// update last heard
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::dplus);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::dplus);
 			g_Reflector.ReleaseUsers();
 		}
 		else
