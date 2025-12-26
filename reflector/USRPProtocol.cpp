@@ -225,7 +225,7 @@ void CUSRPProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header,
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::usrp);
 		g_Reflector.ReleaseUsers();
 	}
 }
