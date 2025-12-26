@@ -278,6 +278,7 @@ void CReflector::CloseStream(std::shared_ptr<CPacketStream> stream)
 
 			// dashboard event
 			GetUsers()->Closing(stream->GetUserCallsign(), GetStreamModule(stream), stream->GetOwnerClient()->GetProtocol());
+			ReleaseUsers();
 
 			std::cout << "Closing stream of module " << GetStreamModule(stream) << std::endl;
 		}

@@ -129,6 +129,7 @@ CConfigure::CConfigure()
 	data[g_Keys.dashboard.nngaddr] = "tcp://127.0.0.1:5555";
 	data[g_Keys.dashboard.interval] = 10U;
 	data[g_Keys.dashboard.enable] = false;
+	data[g_Keys.dashboard.debug] = false;
 	data[g_Keys.ysf.ysfreflectordb.id] = 0U;
 }
 
@@ -524,6 +525,8 @@ bool CConfigure::ReadData(const std::string &path)
 					data[g_Keys.dashboard.nngaddr] = value;
 				else if (0 == key.compare("Interval"))
 					data[g_Keys.dashboard.interval] = getUnsigned(value, "Dashboard Interval", 1, 3600, 10);
+				else if (0 == key.compare("NNGDebug"))
+					data[g_Keys.dashboard.debug] = IS_TRUE(value[0]);
 				else
 					badParam(key);
 				break;
