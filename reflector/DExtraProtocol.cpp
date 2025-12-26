@@ -351,7 +351,7 @@ void CDextraProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Heade
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::dextra);
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::dextra);
 		g_Reflector.ReleaseUsers();
 	}
 }

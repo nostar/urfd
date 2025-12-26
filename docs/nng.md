@@ -29,7 +29,7 @@ graph TD
 
     %% Internal Flows
     CC -- "client_connect / client_disconnect" --> NP
-    CU -- "hearing (activity)" --> NP
+    CU -- "hearing / closing" --> NP
     CR -- "periodic state report" --> NP
     PS -- "IsActive status" --> CR
 
@@ -118,6 +118,21 @@ Triggered when the reflector "hears" an active transmission. This event is sent 
   "ur": "CQCQCQ",
   "rpt1": "GB3NB",
   "rpt2": "XLX123 A",
+  "module": "A",
+  "protocol": "M17"
+}
+```
+
+### 4. Transmission End (`closing`)
+
+Triggered when a transmission stream is closed (user stops talking).
+
+**Payload Structure:**
+
+```json
+{
+  "type": "closing",
+  "my": "G4XYZ",
   "module": "A",
   "protocol": "M17"
 }

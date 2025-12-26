@@ -411,7 +411,9 @@ void CURFProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		// release
 		g_Reflector.ReleaseClients();
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, peer, EProtocol::urf);
+        CCallsign xlx = rpt2;
+        xlx.SetCSModule(Header->GetRpt2Module());
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, xlx, EProtocol::urf);
 		g_Reflector.ReleaseUsers();
 	}
 }

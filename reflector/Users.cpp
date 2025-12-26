@@ -76,3 +76,14 @@ void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign
     event["protocol"] = g_GateKeeper.ProtocolName(protocol);
     g_NNGPublisher.Publish(event);
 }
+
+void CUsers::Closing(const CCallsign &my, char module, EProtocol protocol)
+{
+    // dashboard event
+    nlohmann::json event;
+    event["type"] = "closing";
+    event["my"] = my.GetCS();
+    event["module"] = std::string(1, module);
+    event["protocol"] = g_GateKeeper.ProtocolName(protocol);
+    g_NNGPublisher.Publish(event);
+}
