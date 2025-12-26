@@ -570,7 +570,7 @@ void CG3Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, c
 				}
 
 				// update last heard
-				g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+				g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, EProtocol::g3);
 				g_Reflector.ReleaseUsers();
 			}
 		}

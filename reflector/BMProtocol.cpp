@@ -368,7 +368,7 @@ void CBMProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, c
 		// release
 		g_Reflector.ReleaseClients();
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, peer);
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, peer, EProtocol::bm);
 		g_Reflector.ReleaseUsers();
 	}
 }

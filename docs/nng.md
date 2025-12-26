@@ -118,7 +118,8 @@ Triggered when the reflector "hears" an active transmission. This event is sent 
   "ur": "CQCQCQ",
   "rpt1": "GB3NB",
   "rpt2": "XLX123 A",
-  "module": "A"
+  "module": "A",
+  "protocol": "M17"
 }
 ```
 

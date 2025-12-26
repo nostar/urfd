@@ -153,7 +153,7 @@ void CImrsProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header,
 
 		if (Header)
 		{
-			g_Reflector.GetUsers()->Hearing(Header->GetMyCallsign(), Header->GetRpt1Callsign(), Header->GetRpt2Callsign());
+			g_Reflector.GetUsers()->Hearing(Header->GetMyCallsign(), Header->GetRpt1Callsign(), Header->GetRpt2Callsign(), EProtocol::imrs);
 			g_Reflector.ReleaseUsers();
 		}
 	}
