@@ -150,7 +150,7 @@ bool CCallsign::IsValid(void) const
 			iNum++;
 		}
 	}
-	valid = valid && (iNum < 3);
+	// valid = valid && (iNum < 3); // Allow numeric callsigns (e.g. M17, DMR IDs)
 	// all remaining char are letter, number or space
 	for ( ; i < CALLSIGN_LEN; i++)
 	{
