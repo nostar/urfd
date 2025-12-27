@@ -81,6 +81,18 @@ void CTCSocket::Dispatcher()
 				memcpy(&pkt, buf, sizeof(STCPacket));
 				nng_free(buf, sz);
 
+				// Log first packet from this module
+				if (m_SeenModules.find(pkt.module) == m_SeenModules.end())
+				{
+					std::cout << "NNG: Received first packet from module " << pkt.module << std::endl;
+					m_SeenModules.insert(pkt.module);
+				}
+                
+                {
+                    std::lock_guard<std::mutex> lock(m_StatsMutex);
+                    m_PacketCounts[pkt.module]++;
+                }
+
 				if (m_ClientQueue)
 				{
 					// Client mode: everything goes to one queue
@@ -246,4 +258,21 @@ void CTCClient::Receive(std::queue<std::unique_ptr<STCPacket>> &queue, int ms)
 void CTCClient::ReConnect()
 {
 	// NNG handles reconnection automatically
+}
+
+std::string CTCSocket::GetAndClearStats()
+{
+    std::lock_guard<std::mutex> lock(m_StatsMutex);
+    if (m_PacketCounts.empty()) return "";
+
+    std::stringstream ss;
+    bool first = true;
+    for (const auto& kv : m_PacketCounts)
+    {
+        if (!first) ss << ", ";
+        ss << kv.first << ": " << kv.second;
+        first = false;
+    }
+    m_PacketCounts.clear();
+    return ss.str();
 }

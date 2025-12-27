@@ -10,6 +10,8 @@
 #include <condition_variable>
 #include <map>
 #include <atomic>
+#include <set>
+#include <sstream>
 #include <nng/nng.h>
 #include <nng/protocol/pair1/pair.h>
 
@@ -57,6 +59,8 @@ public:
 
 	bool IsConnected(char module) const;
     int GetFD(char module) const; // Legacy compat: returns 1 if connected, -1 if not
+    
+    std::string GetAndClearStats();
 
 protected:
     nng_socket m_Sock;
@@ -68,7 +72,15 @@ protected:
     // Per-module input queues
     std::map<char, std::shared_ptr<CTCPacketQueue>> m_Queues;
     // Client queue (receives all)
+    // Client queue (receives all)
     std::shared_ptr<CTCPacketQueue> m_ClientQueue;
+
+    // Track seen modules for logging
+    std::set<char> m_SeenModules;
+    
+    // Packet counters
+    std::map<char, int> m_PacketCounts;
+    std::mutex m_StatsMutex;
 
     void Dispatcher();
 };
