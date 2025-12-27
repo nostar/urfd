@@ -152,6 +152,11 @@ bool CTCServer::Open(const std::string &address, const std::string &modules, uin
 	// Set receive timeout to 100ms for dispatcher loop
 	nng_duration timeout = 100;
 	nng_socket_set_ms(m_Sock, NNG_OPT_RECVTIMEO, timeout);
+	
+	// Increase buffers to prevent blocking/drops during high load/jitter
+	int bufSize = 4096;
+	nng_socket_set_int(m_Sock, NNG_OPT_RECVBUF, bufSize);
+	nng_socket_set_int(m_Sock, NNG_OPT_SENDBUF, bufSize);
 
 	std::stringstream url;
 	if (address.find("ipc://") == 0) {
