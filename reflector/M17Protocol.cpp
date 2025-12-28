@@ -124,12 +124,15 @@ void CM17Protocol::Task(void)
                     if (Frame->IsLastPacket())
                         Frame->SetLastPacket(false);
 
+                    std::cout << "DEBUG: M17 Split Push 1" << std::endl;
                     OnDvFramePacketIn(Frame, &Ip);
+                    std::cout << "DEBUG: M17 Split Push 2" << std::endl;
                     OnDvFramePacketIn(secondFrame, &Ip);
                 }
                 else
                 {
                     // Fallback for unknown/other types
+                    std::cout << "DEBUG: M17 Fallback Push" << std::endl;
                     OnDvFramePacketIn(Frame, &Ip);
                 }
 			}
