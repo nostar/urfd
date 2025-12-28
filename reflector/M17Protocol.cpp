@@ -76,13 +76,15 @@ void CM17Protocol::Task(void)
 			// callsign muted?
 			if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::m17, Header->GetRpt2Module()) )
 			{
+				// Inspect Header to know codec type (3200 vs 1600)
+				ECodecType cType = Header->GetCodecIn();
+
 				OnDvHeaderPacketIn(Header, Ip);
 
 				// xrf needs a voice frame every 20 ms and an M17 frame is 40 ms, so we need to split it
 				// M17 3200 payload is 16 bytes. We need two 8-byte frames.
                 
-                // Inspect Header to know codec type (3200 vs 1600)
-                ECodecType cType = Header->GetCodecIn();
+                // Header is now invalid (moved in OnDvHeaderPacketIn), so we use cType
                 
                 // Only split if we have enough data (standard M17 is 16 bytes for 3200, 8 for 1600)
                 // CDvFramePacket constructor from M17 copies 16 bytes to m_TCPack.m17
