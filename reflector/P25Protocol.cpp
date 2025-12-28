@@ -391,7 +391,6 @@ bool CP25Protocol::IsValidDvHeaderPacket(const CIp &Ip, const CBuffer &Buffer, s
 		{
 			uint32_t uiSrcId = ((Buffer.data()[1] << 16) | ((Buffer.data()[2] << 8) & 0xff00) | (Buffer.data()[3] & 0xff));
 			m_uiStreamId = static_cast<uint32_t>(::rand());
-            printf("P25_DEBUG: Header 0x66. New ID=0x%X (SrcID=0x%X)\n", m_uiStreamId, uiSrcId);
 			CCallsign csMY = CCallsign("", uiSrcId);
 			CCallsign rpt1 = CCallsign("", uiSrcId);
 			CCallsign rpt2 = m_ReflectorCallsign;
