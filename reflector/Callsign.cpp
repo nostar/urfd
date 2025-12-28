@@ -151,10 +151,9 @@ bool CCallsign::IsValid(void) const
 		}
 	}
 	valid = valid && (iNum < 3);
-	// all remaining char are letter, number or space
 	for ( ; i < CALLSIGN_LEN; i++)
 	{
-		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]));
+		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]) || m_Callsign.c[i] == '-' || m_Callsign.c[i] == '.' || m_Callsign.c[i] == '/');
 	}
 
 	// prefix

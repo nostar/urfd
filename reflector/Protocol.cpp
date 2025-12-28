@@ -335,21 +335,7 @@ void CProtocol::Send(const char *buf, const CIp &Ip, uint16_t port) const
 	}
 }
 
-void CProtocol::Send(const SM17Frame &frame, const CIp &Ip) const
-{
-	switch (Ip.GetFamily())
-	{
-	case AF_INET:
-		m_Socket4.Send(frame.magic, sizeof(SM17Frame), Ip);
-		break;
-	case AF_INET6:
-		m_Socket6.Send(frame.magic, sizeof(SM17Frame), Ip);
-		break;
-	default:
-		std::cerr << "WrongFamily: " << Ip.GetFamily() << std::endl;
-		break;
-	}
-}
+
 
 #ifdef DEBUG
 void CProtocol::Dump(const char *title, const uint8_t *data, int length)

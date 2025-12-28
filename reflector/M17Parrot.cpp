@@ -22,12 +22,14 @@ void CM17StreamParrot::Add(const CBuffer &Buffer, uint16_t streamId, uint16_t fr
 	{
 		m_streamId = streamId;
 		size_t length = m_is3200 ? 16 : 8;
-		// Payload is at offset 40 in SM17Frame (4 magic + 2 streamid + 28 lich + 2 fn + 16 payload + 2 crc)
-        // urfd's CDvFramePacket/CM17Packet probably maps this.
-        // For simplicity in this implementation, we assume Buffer passed is the raw payload OR mapped.
-        // Looking at M17Protocol.cpp:410, payload starts at packet.payload
+
+        bool isStandard = false;
+        if (Buffer.size() == 56) isStandard = true;
         
-        const uint8_t *payload = Buffer.data() + 40; // payload offset in SM17Frame
+        // Use parser to get payload pointer safely
+        CM17Packet parser(Buffer.data(), isStandard);
+        const uint8_t *payload = parser.GetPayload();
+        
         m_data.emplace_back(payload, payload + length);
 	}
 	m_lastHeard.start();
@@ -47,15 +49,28 @@ void CM17StreamParrot::playThread()
 {
 	m_state = EParrotState::play;
 	
-    SM17Frame frame;
-    memset(&frame, 0, sizeof(frame));
-    memcpy(frame.magic, "M17 ", 4);
-    frame.streamid = m_streamId; // reuse or generate new? mrefd generates new.
+    // Determine format to send
+    bool useLegacy = g_Configure.GetBoolean(g_Keys.m17.compat); 
     
-    // Set LICH addresses
-    memset(frame.lich.addr_dst, 0xFF, 6); // @ALL
-    m_src.CodeOut(frame.lich.addr_src);
-    frame.lich.frametype = htons(m_frameType);
+    uint8_t buffer[60];
+    CM17Packet pkt(buffer, !useLegacy);
+    memset(buffer, 0, 60); // clear buffer
+    
+    pkt.SetMagic();
+    pkt.SetStreamId(m_streamId);
+    
+    // I will add `SetDestBytes` to CM17Packet? Or just use explicit CCallsign.
+    // I will try to use the `m_src` as dest? No, that's what `CodeOut` does.
+    // I will use `pkt.SetDestCallsign` with a dummy, and then manually overwrite if needed?
+    // Better: `CM17Packet` exposes `GetLichPointer()`. I can write to it manually!
+    
+    // Set Source
+    pkt.SetSourceCallsign(m_src);
+    pkt.SetFrameType(m_frameType);
+
+    // Set Dest to FF
+    uint8_t *lich = pkt.GetLICHPointer();
+    memset(lich, 0xFF, 6); // Dest is at offset 0 of LICH
 
 	auto clock = std::chrono::steady_clock::now();
 	size_t size = m_data.size();
@@ -63,21 +78,32 @@ void CM17StreamParrot::playThread()
 	for (size_t n = 0; n < size; n++)
 	{
 		size_t length = m_is3200 ? 16 : 8;
-        memcpy(frame.payload, m_data[n].data(), length);
+        pkt.SetPayload(m_data[n].data());
         
         uint16_t fn = (uint16_t)n;
 		if (n == size - 1)
 			fn |= 0x8000u;
-        frame.framenumber = htons(fn);
+        pkt.SetFrameNumber(fn);
         
-        CM17CRC m17crc;
-		frame.crc = htons(m17crc.CalcCRC((uint8_t*)&frame, sizeof(SM17Frame)-2));
+        // CRC
+        CM17CRC m17crc_inst;
+        if (!useLegacy) {
+            // Standard LICH CRC
+             uint16_t l_crc = m17crc_inst.CalcCRC(lich, 28);
+            ((SM17LichStandard*)lich)->crc = htons(l_crc);
+        }
+        
+        uint16_t p_crc = m17crc_inst.CalcCRC(pkt.GetBuffer(), pkt.GetSize()-2);
+		pkt.SetCRC(p_crc);
 
 		clock = clock + std::chrono::milliseconds(40);
 		std::this_thread::sleep_until(clock);
         
-        if (m_proto)
-            m_proto->Send(frame, m_client->GetIp());
+        if (m_proto) {
+            CBuffer sendBuf;
+            sendBuf.Append(pkt.GetBuffer(), pkt.GetSize());
+            m_proto->Send(sendBuf, m_client->GetIp());
+        }
 		m_data[n].clear();
 	}
 	m_data.clear();

@@ -68,7 +68,8 @@ public:
 	// packet encoding helpers (public for Parrot access)
 	void Send(const CBuffer &buf, const CIp &Ip) const { CProtocol::Send(buf, Ip); }
 	void Send(const char    *buf, const CIp &Ip) const { CProtocol::Send(buf, Ip); }
-	void Send(const SM17Frame &frame, const CIp &Ip) const { CProtocol::Send(frame, Ip); }
+
+
 
 	virtual bool EncodeDvHeaderPacket(const CDvHeaderPacket &, CBuffer &) const override;
 	virtual bool EncodeDvFramePacket(const CDvFramePacket &, CBuffer &) const override;
@@ -94,7 +95,7 @@ private:
 
 	// packet encoding helpers
 	void EncodeKeepAlivePacket(CBuffer &);
-	void EncodeM17Packet(SM17Frame &, const CDvHeaderPacket &, const CDvFramePacket *, uint32_t) const;
+	void EncodeM17Packet(CM17Packet &packet, const CDvHeaderPacket &, const CDvFramePacket *, uint32_t) const;
 
 	// parrot
 	void HandleParrot(const CIp &Ip, const CBuffer &Buffer, bool isStream);
