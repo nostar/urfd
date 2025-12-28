@@ -197,6 +197,7 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		my.SetSuffix("M17");
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
+		char rpt2Module = Header->GetRpt2Module(); // cache this before move
 
 		// find this client
 		std::shared_ptr<CClient>client = g_Reflector.GetClients()->FindClient(Ip, EProtocol::m17);
@@ -205,6 +206,7 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 			// get client callsign
 			rpt1 = client->GetCallsign();
 			// and try to open the stream
+			// WARNING: OpenStream moves Header, invalidating it!
 			if ( (stream = g_Reflector.OpenStream(Header, client)) != nullptr )
 			{
 				// keep the handle
@@ -212,12 +214,11 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 			}
 		}
 		// release
-		// release
 		g_Reflector.ReleaseClients();
 
 		// update last heard
         CCallsign reflectorCall = rpt2;
-        reflectorCall.SetCSModule(Header->GetRpt2Module());
+        reflectorCall.SetCSModule(rpt2Module);
 		std::cout << "DEBUG: Calling GetUsers()->Hearing for " << my.GetCS() << "..." << std::endl;
 		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, reflectorCall, EProtocol::m17);
 		std::cout << "DEBUG: Returned from GetUsers()->Hearing" << std::endl;
