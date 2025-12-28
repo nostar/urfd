@@ -430,7 +430,8 @@ void CM17Protocol::HandleQueue(void)
 				CM17Packet m17pkt(m17buf, !useLegacy); 
 
                 // Manually do what EncodeM17Packet does for payload
-				EncodeM17Packet(m17pkt, m_StreamsCache[module].m_dvHeader, frame, m_StreamsCache[module].m_iSeqCounter);
+                // adjust sequence number since EncodeM17Packet expects a packet counter (20ms) but we have a frame counter (40ms)
+				EncodeM17Packet(m17pkt, m_StreamsCache[module].m_dvHeader, frame, m_StreamsCache[module].m_iSeqCounter * 2);
                 
                 // OVERWRITE PAYLOAD with our aggregated buffer
                 m17pkt.SetPayload(buf.data());
