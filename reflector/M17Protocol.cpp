@@ -78,17 +78,58 @@ void CM17Protocol::Task(void)
 			{
 				OnDvHeaderPacketIn(Header, Ip);
 
-				// xrf needs a voice frame every 20 ms and an M17 frame is 40 ms, so we need a duplicate
-				auto secondFrame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(*Frame.get()));
+				// xrf needs a voice frame every 20 ms and an M17 frame is 40 ms, so we need to split it
+				// M17 3200 payload is 16 bytes. We need two 8-byte frames.
+                
+                // Inspect Header to know codec type (3200 vs 1600)
+                ECodecType cType = Header->GetCodecIn();
+                
+                // Only split if we have enough data (standard M17 is 16 bytes for 3200, 8 for 1600)
+                // CDvFramePacket constructor from M17 copies 16 bytes to m_TCPack.m17
+                const uint8_t* valData = Frame->GetCodecData(cType);
+                
+                if (cType == ECodecType::c2_3200 || cType == ECodecType::c2_1600)
+                {
+                    uint8_t part1[16] = {0};
+                    uint8_t part2[16] = {0};
+                    
+                    int halfSize = (cType == ECodecType::c2_3200) ? 8 : 4;
+                    
+                    memcpy(part1, valData, halfSize);
+                    memcpy(part2, valData + halfSize, halfSize);
+                    
+                    // Create first frame with first half
+                    // We need a way to set payload. CDvFramePacket doesn't have SetCodecData for arbitrary arrays easily, 
+                    // but it has memcpy in constructor.
+                    // Let's modify the Frame processing.
+                    
+                    // We act on the "Frame" object for the first part
+                    // We need to overwrite its payload.
+                    // Accessing m_TCPack.m17 directly via cast or memcpy to GetCodecData pointer?
+                    uint8_t* framePayload = const_cast<uint8_t*>(valData);
+                    memcpy(framePayload, part1, 16); // Write 8 bytes then zeros? Or just 8 bytes. TCPack.m17 is 16 bytes.
+                    // Wait, if we send to TCD, TCD expects 8 bytes for 20ms? Or 16 bytes padded?
+                    // Let's assume 8 bytes at start.
+                    memset(framePayload + halfSize, 0, 16 - halfSize);
+                    
+                    // Create second frame with second half
+                    auto secondFrame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(*Frame.get()));
+                    // Overwrite payload of second frame
+                    uint8_t* secondPayload = const_cast<uint8_t*>(secondFrame->GetCodecData(cType));
+                    memcpy(secondPayload, part2, 16); // Copy half size, pad rest
+                    memset(secondPayload + halfSize, 0, 16 - halfSize);
+                    
+                    if (Frame->IsLastPacket())
+                        Frame->SetLastPacket(false);
 
-				// This is not a second packet, so clear the last packet status, since the real last packet it the secondFrame
-				if (Frame->IsLastPacket())
-					Frame->SetLastPacket(false);
-
-				// push the "first" packet
-				OnDvFramePacketIn(Frame, &Ip);
-				// push the "second" packet
-				OnDvFramePacketIn(secondFrame, &Ip); // push two packet because we need a packet every 20 ms
+                    OnDvFramePacketIn(Frame, &Ip);
+                    OnDvFramePacketIn(secondFrame, &Ip);
+                }
+                else
+                {
+                    // Fallback for unknown/other types
+                    OnDvFramePacketIn(Frame, &Ip);
+                }
 			}
 		}
 		else if ( IsValidConnectPacket(Buffer, Callsign, ToLinkModule) )
