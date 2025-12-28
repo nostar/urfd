@@ -229,8 +229,7 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 ////////////////////////////////////////////////////////////////////////////////////////
 // queue helper
 
-	}
-}
+
 
 // Global buffer for partial M17 frames (simple module-based cache)
 // Note: In a real multi-threaded environment per-module, this should be in m_StreamsCache
@@ -327,7 +326,7 @@ void CM17Protocol::HandleQueue(void)
             // Do we have enough for a full M17 frame? (2x input frames)
             // M17 Frame is 40ms. Input is 20ms. So we need 2 inputs.
             // Expected size: 16 bytes for 3200, 8 bytes for 1600.
-            int targetSize = bytesPerFrame * 2;
+            size_t targetSize = (size_t)(bytesPerFrame * 2);
             
             if (buf.size() >= targetSize || packet->IsLastPacket())
             {
