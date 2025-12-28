@@ -59,6 +59,12 @@ void CCodecStream::ResetStats(uint16_t streamid, ECodecType type)
 	m_RTSum = 0;
 	m_RTCount = 0;
 	m_uiTotalPackets = 0;
+	
+	// clear any stale packets in the local queue
+	while (!m_LocalQueue.IsEmpty())
+	{
+		m_LocalQueue.Pop();
+	}
 }
 
 void CCodecStream::ReportStats()
