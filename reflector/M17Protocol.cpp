@@ -312,18 +312,22 @@ void CM17Protocol::HandleQueue(void)
 		if ( packet->IsDvHeader() )
 		{
 			// this relies on queue feeder setting valid module id
-			// m_StreamsCache[module] will be created if it doesn't exist
-			m_StreamsCache[module].m_dvHeader = CDvHeaderPacket((const CDvHeaderPacket &)*packet.get());
+			// m_StreamsCache[module].m_dvHeader = CDvHeaderPacket((const CDvHeaderPacket &)*packet.get());
 			m_StreamsCache[module].m_iSeqCounter = 0;
 		}
 		else if (packet->IsDvFrame())
 		{
 			if ((1 == m_StreamsCache[module].m_iSeqCounter % 2) || packet->IsLastPacket())
 			{
-				// encode it
-				SM17Frame frame;
+				// Determine if we should send Legacy or Standard packets
+				// Default to Legacy (true) if key missing, but Configure.cpp handles default.
+				bool useLegacy = g_Configure.GetBoolean(g_Keys.m17.compat); 
 
-				EncodeM17Packet(frame, m_StreamsCache[module].m_dvHeader, (CDvFramePacket *)packet.get(), m_StreamsCache[module].m_iSeqCounter);
+				// encode it using M17Packet wrapper
+				uint8_t buffer[60]; // Enough for both
+				CM17Packet m17pkt(buffer, !useLegacy); 
+
+				EncodeM17Packet(m17pkt, m_StreamsCache[module].m_dvHeader, (CDvFramePacket *)packet.get(), m_StreamsCache[module].m_iSeqCounter);
 
 				// push it to all our clients linked to the module and who are not streaming in
 				CClients *clients = g_Reflector.GetClients();
@@ -335,12 +339,27 @@ void CM17Protocol::HandleQueue(void)
 					if ( !client->IsAMaster() && (client->GetReflectorModule() == module) )
 					{
 						// set the destination
-						client->GetCallsign().CodeOut(frame.lich.addr_dst);
-						// set the crc
-						frame.crc = htons(m17crc.CalcCRC(frame.magic, sizeof(SM17Frame)-2));
-						// now send the packet
-						Send(frame, client->GetIp());
+						m17pkt.SetDestCallsign(client->GetCallsign());
 
+						// Calculate LICH CRC if Standard
+						if (!useLegacy) {
+							uint8_t *lich = m17pkt.GetLICHPointer();
+							// CRC over first 28 bytes of LICH
+							uint16_t l_crc = m17crc.CalcCRC(lich, 28);
+							// Set CRC at offset 28 of LICH (bytes 28,29)
+							// We can cast to SM17LichStandard to be safe or use set/memcpy
+							((SM17LichStandard*)lich)->crc = htons(l_crc);
+						}
+
+						// set the packet crc
+						// Legacy: CRC over first 52 bytes. Standard: CRC over first 54 bytes.
+						uint16_t p_crc = m17crc.CalcCRC(m17pkt.GetBuffer(), m17pkt.GetSize() - 2);
+						m17pkt.SetCRC(p_crc);
+
+						// now send the packet
+                        CBuffer sendBuf;
+                        sendBuf.Append(m17pkt.GetBuffer(), m17pkt.GetSize());
+						Send(sendBuf, client->GetIp());
 					}
 				}
 				g_Reflector.ReleaseClients();
@@ -462,10 +481,23 @@ bool CM17Protocol::IsValidDvPacket(const CBuffer &Buffer, std::unique_ptr<CDvHea
 {
 	uint8_t tag[] = { 'M', '1', '7', ' ' };
 
-	if ( (Buffer.size() == sizeof(SM17Frame)) && (0 == Buffer.Compare(tag, sizeof(tag))) && (0x4U == (0x1CU & Buffer[19])) )
+	bool isStandard = false;
+	bool validSize = false;
+	
+	if (Buffer.size() == sizeof(SM17FrameLegacy)) {
+		validSize = true;
+		isStandard = false;
+	} else if (Buffer.size() == sizeof(SM17FrameStandard)) {
+		validSize = true;
+		isStandard = true;
+	}
+
+	if ( validSize && (0 == Buffer.Compare(tag, sizeof(tag))) && (0x4U == (0x1CU & Buffer[19])) )
 	{
-		// Make the M17 header
-		CM17Packet m17(Buffer.data());
+		// Make the M17 header wrapper
+		// Note: CM17Packet constructor copies the buffer
+		CM17Packet m17(Buffer.data(), isStandard);
+		
 		// get the header
 		header = std::unique_ptr<CDvHeaderPacket>(new CDvHeaderPacket(m17));
 
@@ -490,28 +522,28 @@ void CM17Protocol::EncodeKeepAlivePacket(CBuffer &Buffer)
 	g_Reflector.GetCallsign().CodeOut(Buffer.data() + 4);
 }
 
-void CM17Protocol::EncodeM17Packet(SM17Frame &frame, const CDvHeaderPacket &Header, const CDvFramePacket *DvFrame, uint32_t iSeq) const
+void CM17Protocol::EncodeM17Packet(CM17Packet &packet, const CDvHeaderPacket &Header, const CDvFramePacket *DvFrame, uint32_t iSeq) const
 {
 	ECodecType codec_in = Header.GetCodecIn();  // We'll need this
 
-
 	// do the lich structure first
 	// first, the src callsign (the lich.dest will be set in HandleQueue)
-	CCallsign from = Header.GetMyCallsign();
-	from.CodeOut(frame.lich.addr_src);
+	packet.SetSourceCallsign(Header.GetMyCallsign());
+	
 	// then the frame type, if the incoming frame is M17 1600, then it will be Voice+Data only, otherwise Voice-Only
-	frame.lich.frametype = htons((ECodecType::c2_1600==codec_in) ? 0x7U : 0x5U);
-	memcpy(frame.lich.nonce, DvFrame->GetNonce(), 14);
+	packet.SetFrameType((ECodecType::c2_1600==codec_in) ? 0x7U : 0x5U);
+	packet.SetNonce(DvFrame->GetNonce());
 
 	// now the main part of the packet
-	memcpy(frame.magic, "M17 ", 4);
+	packet.SetMagic();
+	
 	// the frame number comes from the stream sequence counter
 	uint16_t fn = (iSeq / 2) % 0x8000U;
 	if (DvFrame->IsLastPacket())
 		fn |= 0x8000U;
-	frame.framenumber = htons(fn);
-	memcpy(frame.payload, DvFrame->GetCodecData(ECodecType::c2_3200), 16);
-	frame.streamid = Header.GetStreamId();	// no host<--->network byte swapping since we never do any math on this value
+	packet.SetFrameNumber(fn);
+	packet.SetPayload(DvFrame->GetCodecData(ECodecType::c2_3200));
+	packet.SetStreamId(Header.GetStreamId());
 	// the CRC will be set in HandleQueue, after lich.dest is set
 }
 

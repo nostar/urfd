@@ -62,6 +62,7 @@
 #define JIPV6EXTERNAL            "IPv6External"
 #define JJSONPATH                "JsonPath"
 #define JM17                     "M17"
+#define JM17LEGACYCOMPAT         "M17LegacyCompat"
 #define JMMDVM                   "MMDVM"
 #define JMODE                    "Mode"
 #define JMODULE                  "Module"
@@ -368,6 +369,8 @@ bool CConfigure::ReadData(const std::string &path)
 			case ESection::m17:
 				if (0 == key.compare(JPORT))
 					data[g_Keys.m17.port] = getUnsigned(value, "M17 Port", 1024, 65535, 17000);
+				else if (0 == key.compare(JM17LEGACYCOMPAT))
+				    data[g_Keys.m17.compat] = IS_TRUE(value[0]);
 				else
 					badParam(key);
 				break;
@@ -684,6 +687,11 @@ bool CConfigure::ReadData(const std::string &path)
 	isDefined(ErrorLevel::fatal, JDMRPLUS, JPORT, g_Keys.dmrplus.port, rval);
 	isDefined(ErrorLevel::fatal, JDPLUS, JPORT, g_Keys.dplus.port, rval);
 	isDefined(ErrorLevel::fatal, JM17, JPORT, g_Keys.m17.port, rval);
+	if (data.contains(g_Keys.m17.compat))
+		data[g_Keys.m17.compat] = GetBoolean(g_Keys.m17.compat);
+	else
+	    data[g_Keys.m17.compat] = true; // Default to Legacy Mode (54 bytes) for compatibility
+
 	isDefined(ErrorLevel::fatal, JURF, JPORT, g_Keys.urf.port, rval);
 
 	// BM
