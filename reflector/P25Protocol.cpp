@@ -402,6 +402,7 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 			offset = 4U;
 			break;
 		case 0x80U:
+		{
             printf("P25_DEBUG: RX 0x80 Terminator. Resetting StreamID 0x%X -> 0\n", m_uiStreamId);
 			last = true;
             uint32_t lastId = m_uiStreamId; // Capture ID before reset
@@ -419,6 +420,7 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
              // (Buffer.data()[0U]) is correct.
             return true; 
             // Return early to avoid the fallthrough creation with ID 0
+		}
 			break;
 		default:
             printf("P25_DEBUG: Unknown P25 Byte0=0x%02X\n", Buffer.data()[0U]);
