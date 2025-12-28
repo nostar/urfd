@@ -243,8 +243,11 @@ void CM17Protocol::HandleQueue(void)
 		if ( packet->IsDvHeader() )
 		{
 			// this relies on queue feeder setting valid module id
-			// m_StreamsCache[module].m_dvHeader = CDvHeaderPacket((const CDvHeaderPacket &)*packet.get());
-			m_StreamsCache[module].m_iSeqCounter = 0;
+            if (packet)
+            {
+                m_StreamsCache[module].m_dvHeader = *(static_cast<CDvHeaderPacket*>(packet.get()));
+                m_StreamsCache[module].m_iSeqCounter = 0;
+            }
 		}
 		else if (packet->IsDvFrame())
 		{
