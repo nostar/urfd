@@ -390,6 +390,9 @@ void CM17Protocol::HandleQueue(void)
                  offset = (seq % 2) * 8;
             }
 
+            // std::cout << "DEBUG: HandleQueue Mod=" << module << " Seq=" << seq << " Offset=" << offset << " BufSizeBefore=" << buf.size() << std::endl;
+            std::cout << "DEBUG: HandleQueue Mod=" << module << " Seq=" << seq << " Offset=" << offset << " BufSizeBefore=" << buf.size() << std::endl;
+
             buf.insert(buf.end(), data + offset, data + offset + bytesPerFrame);
 
             // Do we have enough for a full M17 frame? (2x input frames)
