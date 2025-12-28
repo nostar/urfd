@@ -139,20 +139,9 @@ bool CCallsign::IsValid(void) const
 	bool valid = true;
 	int i;
 
-	// callsign
-	// first 3 chars are letter or number but cannot be all number
-	int iNum = 0;
-	for ( i = 0; i < 3; i++ )
-	{
-		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]));
-		if ( IsNumber(m_Callsign.c[i]) )
-		{
-			iNum++;
-		}
-	}
-	// valid = valid && (iNum < 3); // Allow numeric callsigns (e.g. M17, DMR IDs)
-	// all remaining char are letter, number or space
-	for ( ; i < CALLSIGN_LEN; i++)
+	// check callsign characters (Letter, Number, Space, -, ., /)
+	// We allow this for all positions to support M17 and numeric IDs
+	for ( i = 0; i < CALLSIGN_LEN; i++ )
 	{
 		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]) || m_Callsign.c[i] == '-' || m_Callsign.c[i] == '.' || m_Callsign.c[i] == '/');
 	}
