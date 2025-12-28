@@ -1,6 +1,7 @@
 #include "NNGPublisher.h"
 #include "Global.h"
 #include <iostream>
+#include <sstream>
 
 CNNGPublisher::CNNGPublisher()
     : m_started(false)
@@ -59,8 +60,27 @@ void CNNGPublisher::Publish(const nlohmann::json &event)
         std::cout << "NNG debug: Attempting to publish message of size " << msg.size() << ": " << msg << std::endl;
     int rv = nng_send(m_sock, (void *)msg.c_str(), msg.size(), NNG_FLAG_NONBLOCK);
     if (rv == 0) {
-        std::cout << "NNG: Published event: " << event["type"] << std::endl;
+        // Count event instead of logging
+        std::string type = event["type"];
+        m_EventCounts[type]++;
     } else if (rv != NNG_EAGAIN) {
         std::cerr << "NNG: Send error: " << nng_strerror(rv) << std::endl;
     }
+}
+
+std::string CNNGPublisher::GetAndClearStats()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_EventCounts.empty()) return "";
+
+    std::stringstream ss;
+    bool first = true;
+    for (const auto& kv : m_EventCounts)
+    {
+        if (!first) ss << ", ";
+        ss << "\"" << kv.first << "\": " << kv.second;
+        first = false;
+    }
+    m_EventCounts.clear();
+    return ss.str();
 }

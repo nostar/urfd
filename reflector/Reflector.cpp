@@ -397,13 +397,47 @@ void CReflector::MaintenanceThread()
 				if (++nngCounter >= (nngInterval * 10))
 				{
 					nngCounter = 0;
-					std::cout << "NNG debug: Periodic state broadcast..." << std::endl;
+					// Removed spammy log: std::cout << "NNG debug: Periodic state broadcast..." << std::endl;
 					nlohmann::json state;
 					state["type"] = "state";
 					JsonReport(state);
 					g_NNGPublisher.Publish(state);
 				}
+                
+                // Log aggregated stats every ~2 minutes (assuming loop runs every 10s * XML_UPDATE_PERIOD=10 = 100s per cycle? No wait)
+                // XML_UPDATE_PERIOD is 10. Loop is XML_UPDATE_PERIOD * 10 = 100 iterations.
+                // Sleep is 100ms. So loop is 10s total.
+                // nngInterval default is 10s.
+                // Reflector.cpp loop logic is:
+                // while(keep_running) {
+                //   Update XML/JSON
+                //   for (10s) { 
+                //     update NNG state
+                //     check TC
+                //     sleep(100ms)
+                //   }
+                // }
+                // So the outer loop runs every 10s.
+                // To get ~2 minutes, we can use a static counter in the outer loop or piggyback here.
+                // Let's use a static counter inside the loop or check 'i' (which resets every 10s).
+                // Easier: add a static counter to MaintenanceThread or verify nngCounter.
 			}
+            
+            // New Aggregated Stats Logic
+            // Log every 1200 iterations (1200 * 100ms = 120s = 2 mins)
+            static int statsCounter = 0;
+            if (++statsCounter >= 1200) {
+               statsCounter = 0;
+               std::string nngStats = g_NNGPublisher.GetAndClearStats();
+               std::string tcStats = g_TCServer.GetAndClearStats();
+               
+               if (!nngStats.empty() || !tcStats.empty()) {
+                   std::cout << "Stats: ";
+                   if (!nngStats.empty()) std::cout << "NNG [" << nngStats << "] ";
+                   if (!tcStats.empty()) std::cout << "TCD [" << tcStats << "]";
+                   std::cout << std::endl;
+               }
+            }
 
 			if (tcport && g_TCServer.AnyAreClosed())
 			{

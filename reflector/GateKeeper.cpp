@@ -295,6 +295,8 @@ const std::string CGateKeeper::ProtocolName(const EProtocol p) const
 			return "Brandmeister";
 		case EProtocol::g3:
 			return "Icom G3";
+		case EProtocol::m17:
+			return "M17";
 		default:
 			return "NONE";
 	}
