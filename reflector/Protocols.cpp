@@ -85,11 +85,11 @@ bool CProtocols::Init(void)
 			return false;
 
 		m_Protocols.emplace_back(std::unique_ptr<CP25Protocol>(new CP25Protocol));
-		if (! m_Protocols.back()->Initialize("P25", EProtocol::p25, uint16_t(g_Configure.GetUnsigned(g_Keys.p25.port)), P25_IPV4, P25_IPV6))
+		if (! m_Protocols.back()->Initialize("URF", EProtocol::p25, uint16_t(g_Configure.GetUnsigned(g_Keys.p25.port)), P25_IPV4, P25_IPV6))
 			return false;
 
 		m_Protocols.emplace_back(std::unique_ptr<CNXDNProtocol>(new CNXDNProtocol));
-		if (! m_Protocols.back()->Initialize("NXDN", EProtocol::nxdn, uint16_t(g_Configure.GetUnsigned(g_Keys.nxdn.port)), NXDN_IPV4, NXDN_IPV6))
+		if (! m_Protocols.back()->Initialize("URF", EProtocol::nxdn, uint16_t(g_Configure.GetUnsigned(g_Keys.nxdn.port)), NXDN_IPV4, NXDN_IPV6))
 			return false;
 
 		if (g_Configure.GetBoolean(g_Keys.usrp.enable))
