@@ -23,6 +23,10 @@
 #include "P25Protocol.h"
 
 #include "Global.h"
+#include <map>
+#include <vector>
+
+static std::map<CIp, std::vector<CBuffer>> g_P25Pending;
 
 const uint8_t REC62[] = {0x62U, 0x02U, 0x02U, 0x0CU, 0x0BU, 0x12U, 0x64U, 0x00U, 0x00U, 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,0x00U, 0x00U, 0x00U, 0x00U, 0x00U};
 const uint8_t REC63[] = {0x63U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x02U};
@@ -94,16 +98,21 @@ void CP25Protocol::Task(void)
 		// crack the packet
 		if ( IsValidDvPacket(Ip, Buffer, Frame) )
 		{
-			if( !m_uiStreamId && IsValidDvHeaderPacket(Ip, Buffer, Header) )
-			{
-				// callsign muted?
-				if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::p25) )
-				{
-					OnDvHeaderPacketIn(Header, Ip);
-				}
-			}
-			// push the packet
-			OnDvFramePacketIn(Frame, &Ip);
+            if (Frame == nullptr) {
+                // Buffered packet, waiting for header
+            }
+            else {
+			    if( !m_uiStreamId && IsValidDvHeaderPacket(Ip, Buffer, Header) )
+			    {
+				    // callsign muted?
+				    if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::p25) )
+				    {
+					    OnDvHeaderPacketIn(Header, Ip);
+				    }
+			    }
+			    // push the packet
+			    OnDvFramePacketIn(Frame, &Ip);
+            }
 		}
 		else if ( IsValidConnectPacket(Buffer, &Callsign) )
 		{
@@ -307,6 +316,20 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 {
 	if ( (Buffer.size() >= 14) )
 	{
+        // P25/MMDVM sends 0x62..0x65 BEFORE 0x66 (Header/StreamID).
+        // We must buffer these until 0x66 arrives to avoid "Orphaned Frame" loss.
+        if (m_uiStreamId == 0 && Buffer.data()[0U] != 0x66U && Buffer.data()[0U] != 0x80U) {
+             // Buffer this packet
+             std::vector<CBuffer>& list = g_P25Pending[Ip];
+             if (list.size() < 20) { // Safety limit
+                 list.push_back(Buffer);
+                 printf("P25_DEBUG: Buffering pre-header frame 0x%02X (Count=%zu)\n", Buffer.data()[0U], list.size());
+             }
+             frame = nullptr;
+             return true; // Claim valid to prevent "Unknown" log, but return no frame
+        }
+
+		int offset = 0;
 		int offset = 0;
 		bool last = false;
 
@@ -355,6 +378,7 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
             printf("P25_DEBUG: RX 0x80 Terminator. Resetting StreamID 0x%X -> 0\n", m_uiStreamId);
 			last = true;
 			m_uiStreamId = 0;
+            g_P25Pending[Ip].clear(); // Clear any pending garbage
 			break;
 		default:
             printf("P25_DEBUG: Unknown P25 Byte0=0x%02X\n", Buffer.data()[0U]);
@@ -362,7 +386,7 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 		}
 
         if (m_uiStreamId == 0 && Buffer.data()[0U] != 0x66U) {
-             printf("P25_DEBUG: IsValidDvPacket ID=0 for Byte0=0x%02X\n", Buffer.data()[0U]);
+             printf("P25_DEBUG: IsValidDvPacket ID=0 for Byte0=0x%02X (Should have been buffered)\n", Buffer.data()[0U]);
         }
 
 		frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
@@ -386,6 +410,42 @@ bool CP25Protocol::IsValidDvHeaderPacket(const CIp &Ip, const CBuffer &Buffer, s
 			rpt1.SetCSModule(P25_MODULE_ID);
 			rpt2.SetCSModule(' ');
 			header = std::unique_ptr<CDvHeaderPacket>(new CDvHeaderPacket(csMY, CCallsign("CQCQCQ"), rpt1, rpt2, m_uiStreamId, false));
+            
+            // Replay buffered packets now that we have a Stream ID
+            std::vector<CBuffer>& list = g_P25Pending[Ip];
+            if (!list.empty()) {
+                printf("P25_DEBUG: Replaying %zu buffered frames for StreamID 0x%X\n", list.size(), m_uiStreamId);
+                for (const auto& buf : list) {
+                    std::unique_ptr<CDvFramePacket> delayedFrame;
+                    // We call IsValidDvPacket recursively? No, infinite loop with header check?
+                    // IsValidDvPacket logic needs to be manually invoked or bypassed
+                    // Actually we can just perform the creation logic here since we know they are valid frames
+                    int offset = 0;
+                    switch (buf.data()[0U]) {
+                        case 0x62U: offset = 10U; break;
+                        case 0x63U: offset = 1U; break;
+                        case 0x64U: offset = 5U; break;
+                        case 0x65U: offset = 5U; break;
+                        // ... assume standard offsets for buffered frames (they were filtered to be valid before?)
+                        // No, IsValidDvPacket checks size >= 14. We should duplicate that minimal check or just trust our buffer.
+                        // For simplicity, handle common 0x62-0x65 range which logic covers.
+                        default: offset = 5U; break; // Best effort default
+                    }
+                    // For logic consistency we should probably duplicate the switch? 
+                    // Or call IsValidDvPacket but temporarily set m_uiStreamId != 0 (which it is now)
+                    // The IsValidDvPacket logic will create the frame if m_uiStreamId != 0.
+                    // But IsValidDvPacket signature is (..., unique_ptr&).
+                    // Yes taking advantage of m_uiStreamId being set!
+                    
+                    if (IsValidDvPacket(Ip, buf, delayedFrame)) {
+                        if (delayedFrame) {
+                             // Push immediately
+                             OnDvFramePacketIn(delayedFrame, &Ip);
+                        }
+                    }
+                }
+                list.clear();
+            }
 		}
 		return true;
 	}
