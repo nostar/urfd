@@ -626,18 +626,7 @@ bool CM17Protocol::IsValidDvPacket(const CBuffer &Buffer, std::unique_ptr<CDvHea
 		// get the frame
 		frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(m17));
 
-        // DEBUG: Check FrameType
-        printf("M17_DEBUG: IsValidDvPacket Type=%04X Buf19=%02X CodecIn=%d\n", 
-            m17.GetFrameType(), Buffer[19], (int)frame->GetCodecPacket()->codec_in);
-            // Need accessor for codec_in. CDvFramePacket has GetCodecIn() but it calls m_TCPack.
-            // Oh, CDvFramePacket doesn't expose it directly except via cast? 
-            // CPacket has GetCodecIn() ? CPacket does NOT have GetCodecIn().
-            // STCPacket has codec_in.
-            // CDvFramePacket has SetCodecData.
-            // Let's use GetCodecData if possible? No.
-            // Let's just print FrameType. It's enough.
-            
-        printf("M17_DEBUG: IsValidDvPacket Type=%04X Buf19=%02X\n", m17.GetFrameType(), Buffer[19]);
+
 
 		// check validity of packets
 		if ( header && header->IsValid() && frame && frame->IsValid() )

@@ -129,7 +129,7 @@ void CCodecStream::Task(void)
 			// make sure this is the correct packet
 			if ((pack.streamid == Packet->GetCodecPacket()->streamid) && (pack.sequence == Packet->GetCodecPacket()->sequence))
 			{
-                std::cout << "DEBUG: CodecStream Received matching packet streamid=" << std::hex << ntohs(pack.streamid) << " seq=" << std::dec << pack.sequence << std::endl;
+
 				// update statistics
 				auto rt =Packet->m_rtTimer.time();	// the round-trip time
 				if (0 == m_RTCount)
@@ -205,7 +205,7 @@ void CCodecStream::Task(void)
 			// the fd was good and then the send was successful, so...
 			// push the frame to our local queue where it can wait for the transcoder
 
-            std::cout << "DEBUG: CodecStream Pushed streamid=" << std::hex << ntohs(Frame->GetCodecPacket()->streamid) << " seq=" << std::dec << Frame->GetCodecPacket()->sequence << std::endl;
+
 			m_LocalQueue.Push(std::move(m_Queue.Pop()));
 		}
 	}
