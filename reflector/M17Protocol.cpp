@@ -374,22 +374,23 @@ void CM17Protocol::HandleQueue(void)
             const uint8_t* data = ((CDvFramePacket*)packet.get())->GetCodecData(ECodecType::c2_3200);
             if (!data) continue;
 
-            // Append 8 bytes (assuming 3200 mode - safest assumption for now as TCD handles conversion)
-            // Wait, CDvFramePacket::m_TCPack.m17 is 16 bytes.
-            // But if TCD sends 20ms, it only fills first 8 bytes? Or it fills 16 bytes but invalid?
-            // Let's assume it fills first 8 bytes for 20ms frame.
-            
+            const STCPacket* tc = ((CDvFramePacket*)packet.get())->GetCodecPacket();
+            uint32_t seq = tc->sequence;
+
             std::vector<uint8_t>& buf = partialFrames[module];
-            // We append 8 bytes. 
-            // FIXME: If input is NOT 3200 (e.g. 1600), this is 4 bytes. 
-            // Header says codec type.
+
             ECodecType cType = m_StreamsCache[module].m_dvHeader.GetCodecIn();
             int bytesPerFrame = (cType == ECodecType::c2_1600) ? 4 : 8; 
             
             // Safety check
             if (bytesPerFrame > 16) bytesPerFrame = 16;
             
-            buf.insert(buf.end(), data, data + bytesPerFrame);
+            int offset = 0;
+            if (bytesPerFrame == 8) { // C2_3200
+                 offset = (seq % 2) * 8;
+            }
+
+            buf.insert(buf.end(), data + offset, data + offset + bytesPerFrame);
 
             // Do we have enough for a full M17 frame? (2x input frames)
             // M17 Frame is 40ms. Input is 20ms. So we need 2 inputs.
