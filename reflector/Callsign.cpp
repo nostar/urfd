@@ -141,9 +141,10 @@ bool CCallsign::IsValid(void) const
 
 	// check callsign characters (Letter, Number, Space, -, ., /)
 	// We allow this for all positions to support M17 and numeric IDs
+	// Also allow # at the beginning for special M17 addresses
 	for ( i = 0; i < CALLSIGN_LEN; i++ )
 	{
-		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]) || m_Callsign.c[i] == '-' || m_Callsign.c[i] == '.' || m_Callsign.c[i] == '/');
+		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]) || m_Callsign.c[i] == '-' || m_Callsign.c[i] == '.' || m_Callsign.c[i] == '/' || (i==0 && m_Callsign.c[i] == '#'));
 	}
 
 	// prefix
@@ -472,16 +473,55 @@ void CCallsign::CodeIn(const uint8_t *in)
 	m_coded = in[0];
 	for (int i=1; i<6; i++)
 		m_coded = (m_coded << 8) | in[i];
-	if (m_coded > 0xee6b27ffffffu) {
-		std::cerr << "Callsign code is too large, 0x" << std::hex << m_coded << std::dec << std::endl;
+	if (m_coded > 0xf46108ffffffu) {
+		SetCallsign("@INVALID");
 		return;
 	}
 	auto c = m_coded;
 	int i = 0;
+	if (m_coded > 0xee6b27ffffffu) {
+		cs[i++] = '#';
+		c -= 0xee6b28000000u;
+	}
 	while (c) {
 		cs[i++] = m17_alphabet[c % 40];
 		c /= 40;
 	}
+	
+	// Check if numeric (DMR ID?)
+	bool isNumeric = (i > 0);
+	for (int j=0; j<i; j++) {
+		if (!IsNumber(cs[j])) {
+			isNumeric = false;
+			break;
+		}
+	}
+
+	if (isNumeric) {
+		uint32_t id = strtoul(cs, nullptr, 10);
+		if (id > 0) {
+			const UCallsign *pItem = nullptr;
+			g_LDid.Lock();
+			pItem = g_LDid.FindCallsign(id);
+			if (pItem) {
+				// Found a callsign, use it
+				char buf[CALLSIGN_LEN+1];
+				memcpy(buf, pItem->c, CALLSIGN_LEN);
+				buf[CALLSIGN_LEN] = 0;
+				// remove trailing spaces
+				for(int k=CALLSIGN_LEN-1; k>=0; k--) {
+					if (buf[k] == ' ') buf[k] = 0;
+					else break;
+				}
+				strcpy(cs, buf);
+			} else {
+				// Not found, use default
+				strcpy(cs, "N0CALL");
+			}
+			g_LDid.Unlock();
+		}
+	}
+
 	SetCallsign(cs);
 }
 
@@ -504,9 +544,12 @@ void CCallsign::CSIn()
 	auto pos = m17_alphabet.find(m_Module);
 	m_coded = pos;
 	m_coded *= 40;
-	for( int i=CALLSIGN_LEN-2; i>=0; i-- ) {
 		pos = m17_alphabet.find(m_Callsign.c[i]);
 		if (pos == std::string::npos) {
+			if ('#' == m_Callsign.c[i] && 0 == i) {
+				m_coded += 0xee6b28000000u;
+				break;
+			}
 			pos = 0;
 		}
 		m_coded *= 40;
