@@ -352,12 +352,18 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 			offset = 4U;
 			break;
 		case 0x80U:
+            printf("P25_DEBUG: RX 0x80 Terminator. Resetting StreamID 0x%X -> 0\n", m_uiStreamId);
 			last = true;
 			m_uiStreamId = 0;
 			break;
 		default:
+            printf("P25_DEBUG: Unknown P25 Byte0=0x%02X\n", Buffer.data()[0U]);
 			break;
 		}
+
+        if (m_uiStreamId == 0 && Buffer.data()[0U] != 0x66U) {
+             printf("P25_DEBUG: IsValidDvPacket ID=0 for Byte0=0x%02X\n", Buffer.data()[0U]);
+        }
 
 		frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
 		return true;
@@ -373,6 +379,7 @@ bool CP25Protocol::IsValidDvHeaderPacket(const CIp &Ip, const CBuffer &Buffer, s
 		{
 			uint32_t uiSrcId = ((Buffer.data()[1] << 16) | ((Buffer.data()[2] << 8) & 0xff00) | (Buffer.data()[3] & 0xff));
 			m_uiStreamId = static_cast<uint32_t>(::rand());
+            printf("P25_DEBUG: Header 0x66. New ID=0x%X (SrcID=0x%X)\n", m_uiStreamId, uiSrcId);
 			CCallsign csMY = CCallsign("", uiSrcId);
 			CCallsign rpt1 = CCallsign("", uiSrcId);
 			CCallsign rpt2 = m_ReflectorCallsign;
