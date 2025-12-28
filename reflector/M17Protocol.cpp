@@ -379,19 +379,16 @@ void CM17Protocol::HandleQueue(void)
 
             std::vector<uint8_t>& buf = partialFrames[module];
 
-            ECodecType cType = m_StreamsCache[module].m_dvHeader.GetCodecIn();
-            int bytesPerFrame = (cType == ECodecType::c2_1600) ? 4 : 8; 
+            ECodecType cType = ECodecType::c2_3200;
+            // Force header to match what we are sending (tcd always sends 3200)
+            m_StreamsCache[module].m_dvHeader.SetCodecIn(cType);
+
+            int bytesPerFrame = 8; 
             
             // Safety check
             if (bytesPerFrame > 16) bytesPerFrame = 16;
             
-            int offset = 0;
-            if (bytesPerFrame == 8) { // C2_3200
-                 offset = (seq % 2) * 8;
-            }
-
-            // std::cout << "DEBUG: HandleQueue Mod=" << module << " Seq=" << seq << " Offset=" << offset << " BufSizeBefore=" << buf.size() << std::endl;
-            std::cout << "DEBUG: HandleQueue Mod=" << module << " Seq=" << seq << " Offset=" << offset << " BufSizeBefore=" << buf.size() << std::endl;
+            int offset = (seq % 2) * 8;
 
             buf.insert(buf.end(), data + offset, data + offset + bytesPerFrame);
 

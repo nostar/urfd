@@ -72,6 +72,7 @@ public:
 	void SetLocalOrigin(void)          { m_eOrigin = EOrigin::local; }
 	void SetRemotePeerOrigin(void)     { m_eOrigin = EOrigin::peer; }
 	void SetImrsPacketFrameId(uint8_t id) { m_uiImrsPacketFrameId = id; }
+	void SetCodecIn(ECodecType type)   { m_eCodecIn = type; }
 
 protected:
 	// network
