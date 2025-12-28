@@ -330,7 +330,6 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
         }
 
 		int offset = 0;
-		int offset = 0;
 		bool last = false;
 
 		switch (Buffer.data()[0U]) {
