@@ -83,6 +83,7 @@ protected:
 
 	// stream helpers
 	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &);
+	virtual void OnDvFramePacketIn(std::unique_ptr<CDvFramePacket> &, const CIp * = nullptr) override;
 
 private:
 	// packet decoding helpers

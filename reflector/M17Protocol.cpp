@@ -118,15 +118,21 @@ void CM17Protocol::Task(void)
                     auto secondFrame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(*Frame.get()));
                     // Overwrite payload of second frame
                     uint8_t* secondPayload = const_cast<uint8_t*>(secondFrame->GetCodecData(cType));
-                    memcpy(secondPayload, part2, 16); // Copy half size, pad rest
-                    memset(secondPayload + halfSize, 0, 16 - halfSize);
+                    
+					if (cType == ECodecType::c2_3200) {
+						// For 3200, tcd expects the second packet to have data at offset 8
+						memset(secondPayload, 0, 16);
+						memcpy(secondPayload + 8, part2, 8);
+					} else {
+						// For 1600, tcd reads everything from first packet, but let's be safe and put it at 0
+						memcpy(secondPayload, part2, 16);
+						memset(secondPayload + halfSize, 0, 16 - halfSize);
+					}
                     
                     if (Frame->IsLastPacket())
                         Frame->SetLastPacket(false);
 
-                    std::cout << "DEBUG: M17 Split Push 1" << std::endl;
                     OnDvFramePacketIn(Frame, &Ip);
-                    std::cout << "DEBUG: M17 Split Push 2" << std::endl;
                     OnDvFramePacketIn(secondFrame, &Ip);
                 }
                 else
@@ -270,6 +276,22 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		std::cout << "DEBUG: Returned from GetUsers()->Hearing" << std::endl;
 		g_Reflector.ReleaseUsers();
 	}
+}
+
+void CM17Protocol::OnDvFramePacketIn(std::unique_ptr<CDvFramePacket> &Frame, const CIp *Ip)
+{
+	// Keep the client alive
+	if (Ip) {
+		CClients *clients = g_Reflector.GetClients();
+		auto client = clients->FindClient(*Ip, EProtocol::m17);
+		if (client) {
+			client->Heard();
+		}
+		g_Reflector.ReleaseClients();
+	}
+
+	// Call base implementation to push to stream
+	CProtocol::OnDvFramePacketIn(Frame, Ip);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
