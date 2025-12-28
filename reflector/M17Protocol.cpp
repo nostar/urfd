@@ -248,7 +248,7 @@ void CM17Protocol::HandleQueue(void)
 		}
 		else if (packet->IsDvFrame())
 		{
-			if ((1 == m_StreamsCache[module].m_iSeqCounter % 2) || packet->IsLastPacket())
+			if (true) // Always process frames (assumes 40ms input/output match)
 			{
 				// Determine if we should send Legacy or Standard packets
 				// Default to Legacy (true) if key missing, but Configure.cpp handles default.
@@ -447,7 +447,8 @@ void CM17Protocol::EncodeM17Packet(CM17Packet &packet, const CDvHeaderPacket &He
 	packet.SetMagic();
 	
 	// the frame number comes from the stream sequence counter
-	uint16_t fn = (iSeq / 2) % 0x8000U;
+	// Assuming 1:1 mapping for 40ms frames (tcd output)
+	uint16_t fn = iSeq % 0x8000U;
 	if (DvFrame->IsLastPacket())
 		fn |= 0x8000U;
 	packet.SetFrameNumber(fn);
