@@ -22,6 +22,16 @@
 #include "M17Protocol.h"
 #include "M17Packet.h"
 #include "Global.h"
+#include <deque>
+#include <chrono>
+
+struct DelayedM17Packet {
+    std::chrono::steady_clock::time_point releaseTime;
+    std::unique_ptr<CDvFramePacket> packet;
+    CIp ip;
+};
+
+static std::deque<DelayedM17Packet> g_M17DelayedQueue;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // constructor
@@ -137,7 +147,14 @@ void CM17Protocol::Task(void)
                         Frame->SetLastPacket(false);
 
                     OnDvFramePacketIn(Frame, &Ip);
-                    OnDvFramePacketIn(secondFrame, &Ip);
+                    
+                    // Delay second packet by 20ms to pace output for P25/DMR destination
+                    // Pacing is critical to prevent jitter buffer collapse ("sped up" audio)
+                    DelayedM17Packet delayed;
+                    delayed.releaseTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(20);
+                    delayed.packet = std::move(secondFrame);
+                    delayed.ip = Ip;
+                    g_M17DelayedQueue.push_back(std::move(delayed));
                 }
                 else
                 {
@@ -221,6 +238,25 @@ void CM17Protocol::Task(void)
 
 	// handle queue from reflector
 	HandleQueue();
+
+    // handle delayed input (pacing)
+    if (!g_M17DelayedQueue.empty()) {
+        auto now = std::chrono::steady_clock::now();
+        while (!g_M17DelayedQueue.empty()) {
+            if (now >= g_M17DelayedQueue.front().releaseTime) {
+                // Process delayed packet
+                auto& item = g_M17DelayedQueue.front();
+                OnDvFramePacketIn(item.packet, &item.ip); // Helper called on instance? OnDvFramePacketIn is member.
+                // Wait, OnDvFramePacketIn is non-static member function.
+                // g_M17DelayedQueue is static (global).
+                // But Task() is member. We are inside member function.
+                // We can call member function.
+                g_M17DelayedQueue.pop_front();
+            } else {
+                break; // Queue is sorted by time
+            }
+        }
+    }
 
 	// keep client alive
 	if ( m_LastKeepaliveTime.time() > M17_KEEPALIVE_PERIOD )
