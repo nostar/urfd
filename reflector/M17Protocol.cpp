@@ -100,22 +100,26 @@ void CM17Protocol::Task(void)
                     memcpy(part1, valData, halfSize);
                     memcpy(part2, valData + halfSize, halfSize);
                     
-                    // Create first frame with first half
-                    // We need a way to set payload. CDvFramePacket doesn't have SetCodecData for arbitrary arrays easily, 
-                    // but it has memcpy in constructor.
-                    // Let's modify the Frame processing.
+                    // Update Sequence Numbers for TCD aggregation (Even/Odd pair)
+                    // We interpret the incoming M17 frame number as the base sequence.
+                    const STCPacket* tcC = Frame->GetCodecPacket();
+                    STCPacket* tc = const_cast<STCPacket*>(tcC);
+                    uint32_t originalSeq = tc->sequence;
                     
-                    // We act on the "Frame" object for the first part
+                    // First packet gets even sequence
+                    tc->sequence = originalSeq * 2;
+
+                    // Create first frame with first half
                     // We need to overwrite its payload.
-                    // Accessing m_TCPack.m17 directly via cast or memcpy to GetCodecData pointer?
                     uint8_t* framePayload = const_cast<uint8_t*>(valData);
-                    memcpy(framePayload, part1, 16); // Write 8 bytes then zeros? Or just 8 bytes. TCPack.m17 is 16 bytes.
-                    // Wait, if we send to TCD, TCD expects 8 bytes for 20ms? Or 16 bytes padded?
-                    // Let's assume 8 bytes at start.
+                    memcpy(framePayload, part1, 16); 
                     memset(framePayload + halfSize, 0, 16 - halfSize);
                     
                     // Create second frame with second half
                     auto secondFrame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(*Frame.get()));
+                    // Set sequence to Odd
+                     const_cast<STCPacket*>(secondFrame->GetCodecPacket())->sequence = originalSeq * 2 + 1;
+                    
                     // Overwrite payload of second frame
                     uint8_t* secondPayload = const_cast<uint8_t*>(secondFrame->GetCodecData(cType));
                     
