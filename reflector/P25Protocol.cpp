@@ -108,6 +108,34 @@ void CP25Protocol::Task(void)
 				    if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::p25) )
 				    {
 					    OnDvHeaderPacketIn(Header, Ip);
+                        
+                        // Fix Header Orphan: If Header packet 0x66 was also parsed as a Frame with ID 0,
+                        // update its ID now that stream is open (m_uiStreamId is set).
+                        if (Frame && Frame->GetStreamId() == 0 && m_uiStreamId != 0) {
+                            // CDvFramePacket doesn't have SetStreamId? It's often immutable or difficult.
+                            // But CPacket has m_uiStreamId (protected). 
+                            // CDvFramePacket usually exposes it?
+                            // Check Packet.h: CPacket has m_uiStreamId.
+                            // We need a way to set it.
+                            // CPacket::SetStreamId doesn't exist?
+                            // Let's check CPacket in Packet.h.
+                            // CPacket has `uint16_t m_uiStreamId;` protected.
+                            // It doesn't have a setter?
+                            // Wait, `SetStreamId` is needed.
+                            // Or recreate the frame?
+                            // Frame is unique_ptr.
+                            // frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
+                            // We know the offset for 0x66 is 5U.
+                            // Let's recreate it.
+                            int offset = 5U; // For 0x66
+                             // But Frame is generic here. Buffer[0] might not be 0x66?
+                             // ValidDvHeaderPacket checks Buffer[0] == 0x66.
+                             // So yes, it is 0x66.
+                            bool last = false; 
+                             // Recreate frame with correct ID
+                            Frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
+                            printf("P25_DEBUG: Fixed Orphaned Header Frame 0x%X ID 0 -> 0x%X\n", Buffer.data()[0U], m_uiStreamId);
+                        }
 				    }
 			    }
 			    // push the packet
@@ -376,8 +404,21 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 		case 0x80U:
             printf("P25_DEBUG: RX 0x80 Terminator. Resetting StreamID 0x%X -> 0\n", m_uiStreamId);
 			last = true;
+            uint32_t lastId = m_uiStreamId; // Capture ID before reset
 			m_uiStreamId = 0;
             g_P25Pending[Ip].clear(); // Clear any pending garbage
+            
+             // Override creation with lastId 
+            frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[0U]), lastId, last));
+             // Note: 0x80 usually has no payload or minimal.
+             // CDvFramePacket constructor expects data pointer.
+             // Buffer.data()[0U] is the 0x80 byte itself.
+             // IsValidDvPacket logic for 0x80 usually did "break".
+             // It fell through to `new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));`
+             // offset was 0 ! 
+             // (Buffer.data()[0U]) is correct.
+            return true; 
+            // Return early to avoid the fallthrough creation with ID 0
 			break;
 		default:
             printf("P25_DEBUG: Unknown P25 Byte0=0x%02X\n", Buffer.data()[0U]);
