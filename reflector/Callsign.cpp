@@ -544,6 +544,7 @@ void CCallsign::CSIn()
 	auto pos = m17_alphabet.find(m_Module);
 	m_coded = pos;
 	m_coded *= 40;
+	for( int i=CALLSIGN_LEN-2; i>=0; i-- ) {
 		pos = m17_alphabet.find(m_Callsign.c[i]);
 		if (pos == std::string::npos) {
 			if ('#' == m_Callsign.c[i] && 0 == i) {
