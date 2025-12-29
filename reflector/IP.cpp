@@ -160,6 +160,28 @@ bool CIp::operator!=(const CIp &rhs) const	// compares ports, addresses and fami
 	return true;
 }
 
+bool CIp::operator<(const CIp &rhs) const
+{
+	if (addr.ss_family != rhs.addr.ss_family)
+		return addr.ss_family < rhs.addr.ss_family;
+	
+    if (AF_INET == addr.ss_family) {
+		auto l = (const struct sockaddr_in *)&addr;
+		auto r = (const struct sockaddr_in *)&rhs.addr;
+        if (l->sin_addr.s_addr != r->sin_addr.s_addr)
+            return ntohl(l->sin_addr.s_addr) < ntohl(r->sin_addr.s_addr);
+        return ntohs(l->sin_port) < ntohs(r->sin_port);
+    } else if (AF_INET6 == addr.ss_family) {
+		auto l = (const struct sockaddr_in6 *)&addr;
+		auto r = (const struct sockaddr_in6 *)&rhs.addr;
+        int cmp = memcmp(&(l->sin6_addr), &(r->sin6_addr), sizeof(struct in6_addr));
+        if (cmp != 0) return cmp < 0;
+        return ntohs(l->sin6_port) < ntohs(r->sin6_port);
+    }
+    return false;
+}
+
+
 bool CIp::AddressIsZero() const
 {
 	if (AF_INET == addr.ss_family)

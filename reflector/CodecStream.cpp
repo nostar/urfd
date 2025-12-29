@@ -60,6 +60,17 @@ void CCodecStream::ResetStats(uint16_t streamid, ECodecType type)
 	m_RTCount = 0;
 	m_uiTotalPackets = 0;
 	
+	// Start recording if enabled
+	if (g_Configure.GetBoolean(g_Keys.audio.enable))
+	{
+		std::string path = g_Configure.GetString(g_Keys.audio.path);
+		m_Filename = m_Recorder.Start(path);
+	}
+	else
+	{
+		m_Filename.clear();
+	}
+
 	// clear any stale packets in the local queue
 	while (!m_LocalQueue.IsEmpty())
 	{

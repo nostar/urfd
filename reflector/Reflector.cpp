@@ -98,7 +98,7 @@ bool CReflector::Start(void)
 			// if it's a transcoded module, then we need to initialize the codec stream
 			if (port)
 			{
-				if (std::string::npos != tcmods.find(c))
+				if (std::string::npos != tcmods.find(c) || g_Configure.GetBoolean(g_Keys.audio.enable))
 				{
 					if (stream->InitCodecStream())
 						return true;
@@ -277,7 +277,8 @@ void CReflector::CloseStream(std::shared_ptr<CPacketStream> stream)
 			//OnStreamClose(stream->GetUserCallsign());
 
 			// dashboard event
-			GetUsers()->Closing(stream->GetUserCallsign(), GetStreamModule(stream), stream->GetOwnerClient()->GetProtocol());
+			std::string recording = stream->StopRecording();
+			GetUsers()->Closing(stream->GetUserCallsign(), GetStreamModule(stream), stream->GetOwnerClient()->GetProtocol(), recording);
 			ReleaseUsers();
 
 			std::cout << "Closing stream of module " << GetStreamModule(stream) << " (Called by CloseStream)" << std::endl;

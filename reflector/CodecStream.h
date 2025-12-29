@@ -23,6 +23,7 @@
 
 #include "DVFramePacket.h"
 #include "SafePacketQueue.h"
+#include "AudioRecorder.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // class
@@ -38,6 +39,7 @@ public:
 
 	void ResetStats(uint16_t streamid, ECodecType codectype);
 	void ReportStats();
+	std::string StopRecording() { m_Recorder.Stop(); return m_Filename; }
 
 	// destructor
 	virtual ~CCodecStream();
@@ -79,4 +81,8 @@ protected:
 	double       m_RTSum;
 	unsigned int m_RTCount;
 	uint32_t     m_uiTotalPackets;
+
+	// Recording
+	CAudioRecorder m_Recorder;
+	std::string    m_Filename;
 };

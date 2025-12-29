@@ -50,7 +50,7 @@ public:
 	// operation
 	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &, EProtocol protocol = EProtocol::none);
 	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &, const CCallsign &, EProtocol protocol);
-	void   Closing(const CCallsign &, char module, EProtocol protocol);
+	void   Closing(const CCallsign &, char module, EProtocol protocol, const std::string& recording = "");
 
 protected:
 	// data
