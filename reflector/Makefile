@@ -40,7 +40,7 @@ else
 CFLAGS += -DNO_DHT
 endif
 
-SRCS = $(wildcard *.cpp)
+SRCS = $(filter-out test_audio.cpp, $(wildcard *.cpp))
 OBJS = $(SRCS:.cpp=.o)
 DEPS = $(SRCS:.cpp=.d)
 DBUTILOBJS = Configure.o CurlGet.o Lookup.o LookupDmr.o LookupNxdn.o LookupYsf.o YSFNode.o Callsign.o
