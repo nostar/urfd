@@ -39,6 +39,8 @@ private:
     std::ofstream m_File;
     std::string m_Filename;
     std::string m_FullPath;
+    std::time_t m_StartTime;
+    size_t      m_TotalBytes;
     std::mutex m_Mutex;
 
     // Opus state

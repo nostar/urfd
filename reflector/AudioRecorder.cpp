@@ -70,7 +70,11 @@ std::string CAudioRecorder::Start(const std::string& directory)
     InitOpus();
     InitOgg();
 
+    m_StartTime = std::time(nullptr);
+    m_TotalBytes = 0;
     m_IsRecording = true;
+    
+    std::cout << "AudioRecorder: Started recording to " << m_Filename << std::endl;
     return m_Filename;
 }
 
@@ -164,6 +168,7 @@ void CAudioRecorder::WriteOggPage(bool flush)
         if (result == 0) break;
         m_File.write((const char*)m_OggPage.header, m_OggPage.header_len);
         m_File.write((const char*)m_OggPage.body, m_OggPage.body_len);
+        m_TotalBytes += m_OggPage.header_len + m_OggPage.body_len;
     }
 }
 
@@ -205,25 +210,12 @@ void CAudioRecorder::Stop()
     std::lock_guard<std::mutex> lock(m_Mutex);
     if (!m_IsRecording) return;
 
-    // Flush remaining standard logic or just close
-    // In strict Opus, we might want to pad and finish, but for voice logging, truncation of <60ms is acceptable.
-    // Set EOS on last packet if we had one?
-    // Hard to do retroactively. Simpler is just to write a empty packet with EOS.
-    
-    /* 
-    unsigned char dummy[1] = {0};
-    ogg_packet packet;
-    packet.packet = dummy;
-    packet.bytes = 0; // Empty
-    packet.b_o_s = 0;
-    packet.e_o_s = 1;
-    packet.granulepos = m_GranulePos;
-    packet.packetno = m_PacketCount++;
-    ogg_stream_packetin(&m_OggStream, &packet);
-    */
-    
     // Actually, just flushing logic
     WriteOggPage(true);
+
+    double duration = std::difftime(std::time(nullptr), m_StartTime);
+    std::cout << "AudioRecorder: Stopped recording " << m_Filename 
+              << ". Duration: " << duration << "s. Size: " << m_TotalBytes << " bytes." << std::endl;
 
     Cleanup();
 }

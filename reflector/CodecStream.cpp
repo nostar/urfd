@@ -160,6 +160,13 @@ void CCodecStream::Task(void)
 
 				// update content with transcoded data
 				Packet->SetCodecData(&pack);
+				
+				// Write audio to recorder if active
+				if (m_Recorder.IsRecording())
+				{
+				    m_Recorder.Write(pack.usrp, 160);
+				}
+
 				// mark the DStar sync frames if the source isn't dstar
 				if (ECodecType::dstar!=Packet->GetCodecIn() && 0==Packet->GetPacketId()%21)
 				{
