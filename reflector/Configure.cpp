@@ -91,6 +91,8 @@
 #define JUSRP                    "USRP"
 #define JWHITELISTPATH           "WhitelistPath"
 #define JXMLPATH                 "XmlPath"
+#define JYSFAUTOLINKMOD          "AutoLinkModule"
+#define JAUDIO                   "Audio"
 #define JYSF                     "YSF"
 #define JYSFTXRXDB               "YSF TX/RX DB"
 
@@ -233,6 +235,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::ysffreq;
 			else if (0 == hname.compare(JFILES))
 				section = ESection::files;
+			else if (0 == hname.compare(JAUDIO))
+				section = ESection::audio;
 			else
 			{
 				std::cerr << "WARNING: unknown ini file section: " << line << std::endl;
@@ -530,6 +534,14 @@ bool CConfigure::ReadData(const std::string &path)
 					data[g_Keys.dashboard.interval] = getUnsigned(value, "Dashboard Interval", 1, 3600, 10);
 				else if (0 == key.compare("NNGDebug"))
 					data[g_Keys.dashboard.debug] = IS_TRUE(value[0]);
+				else
+					badParam(key);
+				break;
+			case ESection::audio:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.audio.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare("Path"))
+					data[g_Keys.audio.path] = value;
 				else
 					badParam(key);
 				break;
