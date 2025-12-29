@@ -39,7 +39,12 @@ public:
 
 	void ResetStats(uint16_t streamid, ECodecType codectype);
 	void ReportStats();
-	std::string StopRecording() { m_Recorder.Stop(); return m_Filename; }
+	std::string StopRecording() { 
+		if (!m_Recorder.IsRecording()) return "";
+		std::string f = m_Filename; // This is actually CCodecStream::m_Filename set in ResetStats
+		m_Recorder.Stop(); 
+		return f; 
+	}
 
 	// destructor
 	virtual ~CCodecStream();
