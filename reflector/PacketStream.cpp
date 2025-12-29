@@ -116,3 +116,10 @@ const CIp *CPacketStream::GetOwnerIp(void)
 	}
 	return nullptr;
 }
+
+std::string CPacketStream::StopRecording()
+{
+	if (m_CodecStream)
+		return m_CodecStream->StopRecording();
+	return "";
+}
