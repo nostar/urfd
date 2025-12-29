@@ -164,12 +164,6 @@ void CCodecStream::Task(void)
 				// Write audio to recorder if active
 				if (m_Recorder.IsRecording())
 				{
-				    // DEBUG: Print max amplitude to verify data
-				    int16_t max_amp = 0;
-                    for(int i=0; i<160; i++) {
-                        if(std::abs(pack.usrp[i]) > max_amp) max_amp = std::abs(pack.usrp[i]);
-                    }
-				    std::cout << "DEBUG: CodecStream Writing 160 samples. MaxAmp=" << max_amp << std::endl;
 				    m_Recorder.Write(pack.usrp, 160);
 				}
 
