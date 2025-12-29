@@ -187,7 +187,10 @@ void CAudioRecorder::Write(const int16_t* samples, int count)
         if (len < 0) {
             std::cerr << "AudioRecorder: Opus encode error: " << len << std::endl;
         } else {
-            m_GranulePos += FRAME_SIZE;
+            // Ogg Opus always uses 48kHz for granulepos, regardless of input rate
+            // Input: 8000Hz. Frame: 480 samples (60ms).
+            // Output: 48000Hz. Frame: 2880 samples (60ms).
+            m_GranulePos += FRAME_SIZE * (48000 / SAMPLE_RATE);
             
             ogg_packet packet;
             packet.packet = out_buf;
