@@ -540,7 +540,7 @@ bool CConfigure::ReadData(const std::string &path)
 			case ESection::audio:
 				if (0 == key.compare(JENABLE))
 					data[g_Keys.audio.enable] = IS_TRUE(value[0]);
-				else if (0 == key.compare("Path"))
+				else if (0 == key.compare("Path") || 0 == key.compare("path"))
 					data[g_Keys.audio.path] = value;
 				else
 					badParam(key);
