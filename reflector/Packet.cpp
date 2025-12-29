@@ -29,6 +29,9 @@ CPacket::CPacket()
 	m_uiYsfPacketId = 0;
 	m_uiYsfPacketSubId = 0;
 	m_uiYsfPacketFrameId = 0;
+	m_uiImrsPacketId = 0;
+	m_uiImrsPacketSubId = 0;
+	m_uiImrsPacketFrameId = 0;
 	m_uiNXDNPacketId = 0;
 	m_uiM17FrameNumber = 0;
 	m_cModule = ' ';
@@ -40,7 +43,7 @@ CPacket::CPacket()
 // for the network
 CPacket::CPacket(const CBuffer &buf)
 {
-	if (buf.size() > 19)
+	if (buf.size() >= GetNetworkSize())
 	{
 		auto data = buf.data();
 		m_eCodecIn           = (ECodecType)data[4];
@@ -55,6 +58,9 @@ CPacket::CPacket(const CBuffer &buf)
 		m_uiYsfPacketId      = data[17];
 		m_uiYsfPacketSubId   = data[18];
 		m_uiYsfPacketFrameId = data[19];
+		m_uiImrsPacketId      = data[20];
+		m_uiImrsPacketSubId   = data[21];
+		m_uiImrsPacketFrameId = data[22];
 	}
 	else
 		std::cerr << "CPacket initialization failed because the buffer is too small!" << std::endl;
@@ -63,7 +69,7 @@ CPacket::CPacket(const CBuffer &buf)
 void CPacket::EncodeInterlinkPacket(const char *magic, CBuffer &buf) const
 {
 	buf.Set(magic);
-	buf.resize(20);
+	buf.resize(GetNetworkSize());
 	auto data = buf.data();
 	data[4]  = (uint8_t)m_eCodecIn;
 	data[5]  = (uint8_t)m_eOrigin;
@@ -81,6 +87,9 @@ void CPacket::EncodeInterlinkPacket(const char *magic, CBuffer &buf) const
 	data[17] = m_uiYsfPacketId;
 	data[18] = m_uiYsfPacketSubId;
 	data[19] = m_uiYsfPacketFrameId;
+	data[20] = m_uiImrsPacketId;
+	data[21] = m_uiImrsPacketSubId;
+	data[22] = m_uiImrsPacketFrameId;
 }
 
 // dstar constructor
@@ -94,6 +103,9 @@ CPacket::CPacket(uint16_t sid, uint8_t dstarpid)
 	m_uiYsfPacketSubId = 0xffu;
 	m_uiYsfPacketFrameId = 0xffu;
 	m_uiNXDNPacketId = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_cModule = ' ';
 	m_eOrigin = EOrigin::local;
@@ -112,6 +124,9 @@ CPacket::CPacket(uint16_t sid, uint8_t dmrpid, uint8_t dmrspid, bool lastpacket)
 	m_uiYsfPacketSubId = 0xffu;
 	m_uiYsfPacketFrameId = 0xffu;
 	m_uiNXDNPacketId = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_cModule = ' ';
 	m_eOrigin = EOrigin::local;
@@ -129,6 +144,9 @@ CPacket::CPacket(uint16_t sid, uint8_t ysfpid, uint8_t ysfsubpid, uint8_t ysffri
 	m_uiDstarPacketId = 0xffu;
 	m_uiDmrPacketId = 0xffu;
 	m_uiDmrPacketSubid = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiNXDNPacketId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_cModule = ' ';
@@ -148,6 +166,9 @@ CPacket::CPacket(uint16_t sid, uint8_t pid, bool lastpacket)
 	m_uiYsfPacketId = 0xffu;
 	m_uiYsfPacketSubId = 0xffu;
 	m_uiYsfPacketFrameId = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_cModule = ' ';
 	m_eOrigin = EOrigin::local;
@@ -165,6 +186,9 @@ CPacket::CPacket(uint16_t sid, bool isusrp, bool lastpacket)
 	m_uiYsfPacketId = 0xffu;
 	m_uiYsfPacketSubId = 0xffu;
 	m_uiYsfPacketFrameId = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiNXDNPacketId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_cModule = ' ';
@@ -183,6 +207,9 @@ CPacket::CPacket(uint16_t sid, uint8_t dstarpid, uint8_t dmrpid, uint8_t dmrsubp
 	m_uiYsfPacketId = ysfpid;
 	m_uiYsfPacketSubId = ysfsubpid;
 	m_uiYsfPacketFrameId = ysffrid;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_uiM17FrameNumber = 0xffffffffu;
 	m_uiNXDNPacketId = 0xffu;
 	m_cModule = ' ';
@@ -202,6 +229,9 @@ CPacket::CPacket(const CM17Packet &m17) : CPacket()
 	m_uiYsfPacketSubId = 0xffu;
 	m_uiYsfPacketFrameId = 0xffu;
 	m_uiNXDNPacketId = 0xffu;
+	m_uiImrsPacketId = 0xffu;
+	m_uiImrsPacketSubId = 0xffu;
+	m_uiImrsPacketFrameId = 0xffu;
 	m_eCodecIn = (0x6u == (0x6u & m17.GetFrameType())) ? ECodecType::c2_1600 : ECodecType::c2_3200;
 	m_uiM17FrameNumber = 0xffffu & m17.GetFrameNumber();
 	m_bLastPacket = m17.IsLastPacket();
@@ -235,9 +265,16 @@ void CPacket::UpdatePids(const uint32_t pid)
 		m_uiYsfPacketSubId = pid % 5u;
 		m_uiYsfPacketFrameId = ((pid / 5u) & 0x7fu) << 1;
 	}
-	if ( m_uiNXDNPacketId == 0xffu )
+	if ( m_uiNXDNPacketId ==  0xffu )
 	{
-		m_uiNXDNPacketId = pid % 4u;
+		m_uiNXDNPacketId = (pid % 4u);
+	}
+	// imrs pids need update ?
+	if ( m_uiImrsPacketId == 0xffu )
+	{
+		m_uiImrsPacketId = ((pid / 5u) % 8u);
+		m_uiImrsPacketSubId = pid % 5u;
+		m_uiImrsPacketFrameId = ((pid / 5u) & 0x7fu) << 1;
 	}
 	// m17 needs update?
 	if (m_uiM17FrameNumber == 0xffffffffu)
