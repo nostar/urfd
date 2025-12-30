@@ -53,8 +53,9 @@ public:
 	uint16_t GetStreamId(void) const          { return m_uiStreamId; }
 
 	// task
-	void Thread(void);
-	void Task(void);
+	void RxThread(void);
+	void TxThread(void);
+	void Task(void); // Kept for legacy structure if needed, but likely RxThread will absorb it
 
 	// pass-through
 	void Push(std::unique_ptr<CDvFramePacket> p) { m_Queue.Push(std::move(p)); }
@@ -79,6 +80,7 @@ protected:
 	// thread
 	std::atomic<bool> keep_running;
 	std::future<void> m_Future;
+	std::future<void> m_TxFuture;
 
 	// statistics
 	double       m_RTMin;
