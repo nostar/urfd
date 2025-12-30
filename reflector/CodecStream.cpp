@@ -159,6 +159,14 @@ void CCodecStream::RxThread()
 		if (g_TCServer.Receive(m_CSModule, &pack, 1000)) // 1s timeout to check keep_running occasionally
 		{
 			if ( m_LocalQueue.IsEmpty() )
+            // ...
+		}
+		else
+		{
+			// Receive timed out or failed (e.g. module not open).
+			// Sleep briefly to prevent busy-looping if Receive returns immediately (error case).
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
 			{
 				std::cout << "Unexpected transcoded packet received from transcoder: Module='" << pack.module << "' StreamID=" << std::hex << std::showbase << ntohs(pack.streamid) << std::endl;
 			}
