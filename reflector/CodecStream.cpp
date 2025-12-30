@@ -88,7 +88,6 @@ void CCodecStream::ResetStats(uint16_t streamid, ECodecType type)
 	if (g_Configure.GetBoolean(g_Keys.audio.enable))
 	{
 		std::string path = g_Configure.GetString(g_Keys.audio.path);
-        std::cout << "DEBUG: ResetStats starting recording to path: " << path << std::endl;
 		m_Filename = m_Recorder.Start(path);
 	}
 	else
@@ -156,9 +155,6 @@ void CCodecStream::RxThread()
 		
 		if (g_TCServer.Receive(m_CSModule, &pack, 1000)) // 1s timeout to check keep_running occasionally
 		{
-// LOGGING DEBUG
-			std::cout << "DEBUG: RxThread Received packet. Module=" << m_CSModule << " IsOpen=" << m_IsOpen << std::endl;
-
 			if ( m_LocalQueue.IsEmpty() )
 			{
 				std::cout << "Unexpected transcoded packet received from transcoder: Module='" << pack.module << "' StreamID=" << std::hex << std::showbase << ntohs(pack.streamid) << std::endl;
@@ -167,7 +163,6 @@ void CCodecStream::RxThread()
 			{
 				// pop the original packet
 				auto Packet = m_LocalQueue.Pop();
-                std::cout << "DEBUG: Popped packet from LocalQueue. Matching..." << std::endl;
 
 				// make sure this is the correct packet
 				if ((pack.streamid == Packet->GetCodecPacket()->streamid) && (pack.sequence == Packet->GetCodecPacket()->sequence))
@@ -196,13 +191,8 @@ void CCodecStream::RxThread()
 					// Write audio to recorder if active
 					if (m_Recorder.IsRecording())
 					{
-                        // std::cout << "DEBUG: Writing audio frame" << std::endl;
 					    m_Recorder.Write(pack.usrp, 160);
 					}
-                    else 
-                    {
-                        std::cout << "DEBUG: Recorder NOT recording. Filename=" << m_Filename << std::endl;
-                    }
 
 					// mark the DStar sync frames if the source isn't dstar
 					if (ECodecType::dstar!=Packet->GetCodecIn() && 0==Packet->GetPacketId()%21)
