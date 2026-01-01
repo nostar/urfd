@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <iostream>
+#include <map>
+#include <ctime>
+#include <iomanip>
 #include "Defines.h"
 #include "Global.h"
 #include "Protocol.h"
@@ -142,7 +146,17 @@ void CProtocol::OnDvFramePacketIn(std::unique_ptr<CDvFramePacket> &Frame, const 
 	else
 	{
 		std::cout << std::showbase << std::hex;
-		std::cout << "Orphaned Frame with ID " << ntohs(Frame->GetStreamId()) << std::noshowbase << std::dec << " on " << *Ip << std::endl;
+		// Rate limit warnings: only log once every 60 seconds per stream ID
+		static std::map<uint16_t, std::time_t> last_warning;
+		std::time_t now = std::time(nullptr);
+		uint16_t sid = ntohs(Frame->GetStreamId());
+
+		if (last_warning.find(sid) == last_warning.end() || (now - last_warning[sid]) > 60) {
+			std::cout << "Orphaned Frame with ID " << std::hex << std::showbase << sid 
+                      << std::noshowbase << std::dec << " on " << *Ip 
+                      << " (Suppressed for 60s)" << std::endl;
+			last_warning[sid] = now;
+		}
 		Frame.reset();
 	}
 //#endif

@@ -19,6 +19,10 @@
 
 #include <string.h>
 
+#include <iostream>
+#include <map>
+#include <ctime>
+#include <iomanip>
 #include "Global.h"
 #include "DMRMMDVMClient.h"
 #include "DMRMMDVMProtocol.h"
@@ -677,7 +681,16 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 			if ( !stream )
 			{
 				std::cout << std::showbase << std::hex;
-				std::cout << "Late entry DMR voice frame, creating DMR header for DMR stream ID " << ntohl(uiStreamId) << std::noshowbase << std::dec << " on " << Ip << std::endl;
+				static std::map<uint32_t, std::time_t> last_late_entry;
+				std::time_t now = std::time(nullptr);
+				uint32_t sid = ntohl(uiStreamId);
+
+				if (last_late_entry.find(sid) == last_late_entry.end() || (now - last_late_entry[sid]) > 60) {
+					std::cout << "Late entry DMR voice frame, creating DMR header for DMR stream ID " << std::hex << std::showbase << sid 
+							  << std::noshowbase << std::dec << " on " << Ip 
+							  << " (Suppressed for 60s)" << std::endl;
+					last_late_entry[sid] = now;
+				}
 				std::cout << std::noshowbase << std::dec;
 				uint8_t cmd;
 
