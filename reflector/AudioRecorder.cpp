@@ -1,8 +1,8 @@
-#include "AudioRecorder.h"
 #include <iostream>
 #include <cstring>
 #include <ctime>
 #include <sstream>
+#include <random>
 
 // Opus settings for Voice 8kHz Mono
 #define SAMPLE_RATE 8000
@@ -41,10 +41,15 @@ std::string CAudioRecorder::Start(const std::string& directory)
     std::lock_guard<std::mutex> lock(m_Mutex);
     Cleanup();
 
+    // Use random_device for true randomness/seed
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint16_t> dist(0, 255);
+
     // Generate UUIDv7 Filename
     uint8_t uuid[16];
     uint8_t rand_bytes[10]; 
-    for(int i=0; i<10; ++i) rand_bytes[i] = std::rand() & 0xFF; // Minimal entropy for now
+    for(int i=0; i<10; ++i) rand_bytes[i] = (uint8_t)dist(gen);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -68,7 +73,7 @@ std::string CAudioRecorder::Start(const std::string& directory)
     }
 
     InitOpus();
-    InitOgg();
+    InitOgg(); // No longer calls srand
 
     m_StartTime = std::time(nullptr);
     m_TotalBytes = 0;
@@ -91,8 +96,12 @@ void CAudioRecorder::InitOpus()
 void CAudioRecorder::InitOgg()
 {
     // Initialize Ogg stream with random serial
-    std::srand(std::time(nullptr));
-    if (ogg_stream_init(&m_OggStream, std::rand()) != 0) {
+    // Use random_device for thread safety
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist; // full int range
+
+    if (ogg_stream_init(&m_OggStream, dist(gen)) != 0) {
         std::cerr << "AudioRecorder: Failed to init Ogg stream" << std::endl;
         return;
     }
@@ -169,6 +178,7 @@ void CAudioRecorder::WriteOggPage(bool flush)
         m_File.write((const char*)m_OggPage.header, m_OggPage.header_len);
         m_File.write((const char*)m_OggPage.body, m_OggPage.body_len);
         m_TotalBytes += m_OggPage.header_len + m_OggPage.body_len;
+        m_File.flush();
     }
 }
 
