@@ -1,3 +1,4 @@
+#include "AudioRecorder.h"
 #include <iostream>
 #include <cstring>
 #include <ctime>
