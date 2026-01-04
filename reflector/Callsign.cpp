@@ -241,13 +241,40 @@ void CCallsign::SetDmrid(uint32_t dmrid, bool UpdateCallsign)
 	m_uiDmrid = dmrid;
 	if ( UpdateCallsign )
 	{
+		const UCallsign *callsign = nullptr;
 		g_LDid.Lock();
-		{
-			auto callsign = g_LDid.FindCallsign(dmrid);
-			if ( callsign != nullptr )
-			{
-				m_Callsign.l = callsign->l;
+		callsign = g_LDid.FindCallsign(dmrid);
+		
+		// Attempt Extended SSID Lookup (e.g. 3xxxxxx01)
+		if (callsign == nullptr && dmrid > 9999999) {
+			uint32_t baseId = dmrid / 100;
+			callsign = g_LDid.FindCallsign(baseId);
+			if (callsign) {
+				// Base Found, set suffix
+				char suffix[3];
+				snprintf(suffix, 3, "%02u", dmrid % 100);
+				SetSuffix(suffix);
 			}
+		}
+		
+		if ( callsign != nullptr )
+		{
+			m_Callsign.l = callsign->l;
+		}
+		else
+		{
+			// Fallback: Use ID as callsign string if unknown
+			char idBase[CALLSIGN_LEN + 1];
+			snprintf(idBase, CALLSIGN_LEN + 1, "%u", dmrid);
+			// Pad with spaces
+			size_t len = strlen(idBase);
+			if (len < CALLSIGN_LEN) {
+				memset(idBase + len, ' ', CALLSIGN_LEN - len);
+				idBase[CALLSIGN_LEN] = 0;
+			}
+            UCallsign uc;
+            memcpy(uc.c, idBase, CALLSIGN_LEN);
+			m_Callsign.l = uc.l;
 		}
 		g_LDid.Unlock();
 		CSIn();

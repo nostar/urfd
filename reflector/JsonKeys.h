@@ -83,4 +83,7 @@ struct SJsonKeys {
 
 	struct DASHBOARD { const std::string enable, nngaddr, interval, debug; }
 	dashboard { "DashboardEnable", "DashboardNNGAddr", "DashboardInterval", "NNGDebug" };
+
+	struct DMR { const std::string xlx, single, timeout, hold, map_prefix; }
+	dmr { "XlxCompatibility", "SingleMode", "DefaultTimeout", "HoldTime", "Map" };
 };

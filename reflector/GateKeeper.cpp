@@ -278,7 +278,7 @@ const std::string CGateKeeper::ProtocolName(const EProtocol p) const
 		case EProtocol::dextra:
 			return "DExtra";
 		case EProtocol::dmrmmdvm:
-			return "MMDVM DMR";
+			return "DMR";
 		case EProtocol::dmrplus:
 			return "DMR+";
 		case EProtocol::urf:

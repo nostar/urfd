@@ -30,6 +30,24 @@
 #include "Global.h"
 #include "CurlGet.h"
 
+// string trim helpers
+static inline void ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
+
+static inline void rtrim(std::string &s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+static inline void trim(std::string &s) {
+    ltrim(s);
+    rtrim(s);
+}
+
 // ini file keywords
 #define JAUTOLINKMODULE          "AutoLinkModule"
 #define JBINDINGADDRESS          "BindingAddress"
@@ -95,6 +113,7 @@
 #define JAUDIO                   "Audio"
 #define JYSF                     "YSF"
 #define JYSFTXRXDB               "YSF TX/RX DB"
+#define JDMR                     "DMR"
 
 static inline void split(const std::string &s, char delim, std::vector<std::string> &v)
 {
@@ -104,25 +123,7 @@ static inline void split(const std::string &s, char delim, std::vector<std::stri
 		v.push_back(item);
 }
 
-// trim from start (in place)
-static inline void ltrim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
-        return !std::isspace(ch);
-    }));
-}
-
-// trim from end (in place)
-static inline void rtrim(std::string &s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
-        return !std::isspace(ch);
-    }).base(), s.end());
-}
-
-// trim from both ends (in place)
-static inline void trim(std::string &s) {
-    ltrim(s);
-    rtrim(s);
-}
+// ... (unchanged trim functions) ...
 
 CConfigure::CConfigure()
 {
@@ -134,6 +135,12 @@ CConfigure::CConfigure()
 	data[g_Keys.dashboard.enable] = false;
 	data[g_Keys.dashboard.debug] = false;
 	data[g_Keys.ysf.ysfreflectordb.id] = 0U;
+
+	// DMR defaults
+	data[g_Keys.dmr.xlx] = true;
+	data[g_Keys.dmr.single] = false;
+	data[g_Keys.dmr.timeout] = 600U;
+	data[g_Keys.dmr.hold] = 5U;
 }
 
 bool CConfigure::ReadData(const std::string &path)
@@ -237,6 +244,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::files;
 			else if (0 == hname.compare(JAUDIO))
 				section = ESection::audio;
+			else if (0 == hname.compare(JDMR))
+				section = ESection::dmr;
 			else
 			{
 				std::cerr << "WARNING: unknown ini file section: " << line << std::endl;
@@ -542,6 +551,29 @@ bool CConfigure::ReadData(const std::string &path)
 					data[g_Keys.audio.enable] = IS_TRUE(value[0]);
 				else if (0 == key.compare("Path") || 0 == key.compare("path"))
 					data[g_Keys.audio.path] = value;
+				else
+					badParam(key);
+				break;
+			case ESection::dmr:
+				if (0 == key.compare(g_Keys.dmr.xlx))
+					data[g_Keys.dmr.xlx] = IS_TRUE(value[0]);
+				else if (0 == key.compare(g_Keys.dmr.single))
+					data[g_Keys.dmr.single] = IS_TRUE(value[0]);
+				else if (0 == key.compare(g_Keys.dmr.timeout))
+					data[g_Keys.dmr.timeout] = getUnsigned(value, "DMR Timeout", 30, 86400, 600);
+				else if (0 == key.compare(g_Keys.dmr.hold))
+					data[g_Keys.dmr.hold] = getUnsigned(value, "DMR Hold Time", 0, 60, 5);
+				else if (0 == key.compare(0, g_Keys.dmr.map_prefix.length(), g_Keys.dmr.map_prefix))
+				{
+					// Parse MapA, MapB, etc.
+					if (key.length() == g_Keys.dmr.map_prefix.length() + 1 && isupper(key.back()))
+					{
+						// Store custom mapping: "MapA" -> 4001
+						data[key] = getUnsigned(value, key, 0, 16777215, 0);
+					}
+					else
+						badParam(key);
+				}
 				else
 					badParam(key);
 				break;

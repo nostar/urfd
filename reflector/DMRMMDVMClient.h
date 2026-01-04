@@ -20,6 +20,7 @@
 
 #include "Defines.h"
 #include "Client.h"
+#include "DMRScanner.h"
 
 class CDmrmmdvmClient : public CClient
 {
@@ -32,11 +33,16 @@ public:
 	// destructor
 	virtual ~CDmrmmdvmClient() {};
 
+	// Override JsonReport for Multi-Module support
+	virtual void JsonReport(nlohmann::json &report) override;
+
 	// identity
 	EProtocol GetProtocol(void) const           { return EProtocol::dmrmmdvm; }
-	const char *GetProtocolName(void) const     { return "DMRMmdvm"; }
+	const char *GetProtocolName(void) const     { return "DMR"; }
 	bool IsNode(void) const                     { return true; }
 
 	// status
 	bool IsAlive(void) const;
+
+	CDMRScanner m_Scanner;
 };

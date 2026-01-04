@@ -229,6 +229,13 @@ char CProtocol::DmrDstIdToModule(uint32_t tg) const
 
 uint32_t CProtocol::ModuleToDmrDestId(char m) const
 {
+	// Check for custom mapping first (Mini DMR Mode)
+    std::string key = g_Keys.dmr.map_prefix + std::string(1, m);
+    if (g_Configure.Contains(key)) {
+        return g_Configure.GetUnsigned(key);
+    }
+    
+    // Fallback to legacy XLX logic (A=1, B=2...)
 	return (uint32_t)(m - 'A')+1;
 }
 
