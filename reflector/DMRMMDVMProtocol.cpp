@@ -310,7 +310,7 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 					// might not set RPT2 correctly (e.g. just "N8ZA" or "DMRGW").
 					uint32_t tg = 0;
 					try {
-					    std::string destStr = Header->GetUrCallsign().GetCallsign();
+					    std::string destStr = Header->GetUrCallsign().GetCS();
 					    // Remove spaces
 					    destStr.erase(std::remove(destStr.begin(), destStr.end(), ' '), destStr.end());
 					    if (!destStr.empty() && std::all_of(destStr.begin(), destStr.end(), ::isdigit)) {
