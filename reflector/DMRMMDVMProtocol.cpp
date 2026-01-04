@@ -305,8 +305,29 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 					// Helper: module 'A' -> TG X.
 					// Header->GetRpt2Callsign() call has Module set by DmrDstIdToModule.
 					
-					char mod = rpt2.GetCSModule();
-					uint32_t tg = ModuleToDmrDestId(mod);
+					// Mini DMR Fix: Derive TG from Packet Header (Destination), NOT from RPT2 Module Suffix.
+					// RPT2 suffix (e.g. 'A') is good for DroidStar/XLX, but DMRGateway raw rewrites 
+					// might not set RPT2 correctly (e.g. just "N8ZA" or "DMRGW").
+					uint32_t tg = 0;
+					try {
+					    std::string destStr = Header->GetUrCallsign().GetCallsign();
+					    // Remove spaces
+					    destStr.erase(std::remove(destStr.begin(), destStr.end(), ' '), destStr.end());
+					    if (!destStr.empty() && std::all_of(destStr.begin(), destStr.end(), ::isdigit)) {
+					        tg = std::stoul(destStr);
+					    }
+					} catch (...) {
+					    tg = 0;
+					}
+
+                    // Fallback to Module mapping if TG is 0 (e.g. "CQCQCQ" or parse error)
+                    char mod = ' ';
+                    if (tg > 0) {
+                        mod = DmrDstIdToModule(tg);
+                    } else {
+                        mod = rpt2.GetCSModule();
+                        tg = ModuleToDmrDestId(mod);
+                    }
 					
 					// Mini DMR: Explicit Disconnect (TG 4000 or specific unlink cmd)
 					if (tg == 4000 || cmd == CMD_UNLINK)

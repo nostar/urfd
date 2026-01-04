@@ -224,7 +224,18 @@ bool CProtocol::IsSpace(char c) const
 
 char CProtocol::DmrDstIdToModule(uint32_t tg) const
 {
-	return ((char)((tg % 26)-1) + 'A');
+    // Check for custom mapping first (Mini DMR Mode)
+    // Iterate A-Z to find if this TG is mapped
+    for (char m = 'A'; m <= 'Z'; m++) {
+        std::string key = g_Keys.dmr.map_prefix + std::string(1, m);
+        if (g_Configure.Contains(key)) {
+            if (g_Configure.GetUnsigned(key) == tg) {
+                return m;
+            }
+        }
+    }
+
+	return ((char)((tg % 26U)-1U) + 'A');
 }
 
 uint32_t CProtocol::ModuleToDmrDestId(char m) const
