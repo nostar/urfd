@@ -24,7 +24,7 @@ class CM17Client : public CClient
 public:
 	// constructors
 	CM17Client();
-	CM17Client(const CCallsign &, const CIp &, char);
+	CM17Client(const CCallsign &, const CIp &, char, bool isListenOnly = false);
 	CM17Client(const CM17Client &);
 
 	// destructor
@@ -37,6 +37,10 @@ public:
 
 	// status
 	bool IsAlive(void) const;
+	bool IsListenOnly(void) const               { return m_IsListenOnly; }
+
+private:
+	bool m_IsListenOnly;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////

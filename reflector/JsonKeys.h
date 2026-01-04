@@ -26,9 +26,12 @@ struct SJsonKeys {
 	dcs { "DCSPort" },
 	dextra { "DExtraPort" },
 	dmrplus { "DMRPlusPort" },
-	dplus { "DPlusPort" },
-	m17 { "M17Port" },
-	urf { "URFPort" };
+	dplus { "DPlusPort" };
+
+	struct { const std::string port, compat; }
+	m17 { "M17Port", "M17LegacyCompat" };
+
+	PORTONLY urf { "URFPort" };
 
 	struct G3 { const std::string enable; }
 	g3 { "G3Enable" };
