@@ -24,6 +24,12 @@
 #include "Global.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////
+// constructor
+CM17Protocol::CM17Protocol() : CSEProtocol()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
 // operation
 
 bool CM17Protocol::Initialize(const char *type, const EProtocol ptype, const uint16_t port, const bool has_ipv4, const bool has_ipv6)
@@ -209,7 +215,9 @@ void CM17Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+        CCallsign reflectorCall = rpt2;
+        reflectorCall.SetCSModule(Header->GetRpt2Module());
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, reflectorCall, EProtocol::m17);
 		g_Reflector.ReleaseUsers();
 	}
 }
@@ -410,4 +418,16 @@ void CM17Protocol::EncodeM17Packet(SM17Frame &frame, const CDvHeaderPacket &Head
 	memcpy(frame.payload, DvFrame->GetCodecData(ECodecType::c2_3200), 16);
 	frame.streamid = Header.GetStreamId();	// no host<--->network byte swapping since we never do any math on this value
 	// the CRC will be set in HandleQueue, after lich.dest is set
+}
+
+bool CM17Protocol::EncodeDvHeaderPacket(const CDvHeaderPacket &packet, CBuffer &buffer) const
+{
+	packet.EncodeInterlinkPacket(buffer);
+	return true;
+}
+
+bool CM17Protocol::EncodeDvFramePacket(const CDvFramePacket &packet, CBuffer &buffer) const
+{
+	packet.EncodeInterlinkPacket(buffer);
+	return true;
 }

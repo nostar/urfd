@@ -44,12 +44,12 @@ void CUsers::AddUser(const CUser &user)
 ////////////////////////////////////////////////////////////////////////////////////////
 // operation
 
-void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign &rpt2)
+void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign &rpt2, EProtocol protocol)
 {
-	Hearing(my, rpt1, rpt2, g_Reflector.GetCallsign());
+	Hearing(my, rpt1, rpt2, g_Reflector.GetCallsign(), protocol);
 }
 
-void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign &rpt2, const CCallsign &xlx)
+void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign &rpt2, const CCallsign &xlx, EProtocol protocol)
 {
 	CUser heard(my, rpt1, rpt2, xlx);
 
@@ -64,4 +64,26 @@ void CUsers::Hearing(const CCallsign &my, const CCallsign &rpt1, const CCallsign
 	}
 
 	AddUser(heard);
+
+    // dashboard event
+    nlohmann::json event;
+    event["type"] = "hearing";
+    event["my"] = my.GetCS();
+    event["ur"] = rpt1.GetCS();
+    event["rpt1"] = rpt2.GetCS();
+    event["rpt2"] = xlx.GetCS();
+    event["module"] = std::string(1, xlx.GetCSModule());
+    event["protocol"] = g_GateKeeper.ProtocolName(protocol);
+    g_NNGPublisher.Publish(event);
+}
+
+void CUsers::Closing(const CCallsign &my, char module, EProtocol protocol)
+{
+    // dashboard event
+    nlohmann::json event;
+    event["type"] = "closing";
+    event["my"] = my.GetCS();
+    event["module"] = std::string(1, module);
+    event["protocol"] = g_GateKeeper.ProtocolName(protocol);
+    g_NNGPublisher.Publish(event);
 }

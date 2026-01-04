@@ -22,6 +22,7 @@
 #include <mutex>
 
 #include "User.h"
+#include "Defines.h"
 
 class CUsers
 {
@@ -47,8 +48,9 @@ public:
 	std::list<CUser>::const_iterator cend()         { return m_Users.cend(); }
 
 	// operation
-	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &);
-	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &, const CCallsign &);
+	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &, EProtocol protocol = EProtocol::none);
+	void   Hearing(const CCallsign &, const CCallsign &, const CCallsign &, const CCallsign &, EProtocol protocol);
+	void   Closing(const CCallsign &, char module, EProtocol protocol);
 
 protected:
 	// data

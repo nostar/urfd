@@ -304,7 +304,7 @@ void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		// update last heard
 		if ( g_Reflector.IsValidModule(rpt2.GetCSModule()) )
 		{
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::ysf);
 			g_Reflector.ReleaseUsers();
 		}
 	}
@@ -489,7 +489,7 @@ bool CYsfProtocol::IsValidDvHeaderPacket(const CIp &Ip, const CYSFFICH &Fich, co
 			sz[YSF_CALLSIGN_LENGTH] = 0;
 			CCallsign rpt1 = CCallsign((const char *)sz);
 			rpt1.SetCSModule(YSF_MODULE_ID);
-			CCallsign rpt2 = m_ReflectorCallsign;
+			CCallsign rpt2 = g_Reflector.GetCallsign();
 			// as YSF protocol does not provide a module-tranlatable
 			// destid, set module to none and rely on OnDvHeaderPacketIn()
 			// to later fill it with proper value
@@ -542,7 +542,7 @@ bool CYsfProtocol::IsValidDvFramePacket(const CIp &Ip, const CYSFFICH &Fich, con
 			sz[YSF_CALLSIGN_LENGTH] = 0;
 			CCallsign rpt1 = CCallsign((const char *)sz);
 			rpt1.SetCSModule(YSF_MODULE_ID);
-			CCallsign rpt2 = m_ReflectorCallsign;
+			CCallsign rpt2 = g_Reflector.GetCallsign();
 			rpt2.SetCSModule(' ');
 			header = std::unique_ptr<CDvHeaderPacket>(new CDvHeaderPacket(csMY, CCallsign("CQCQCQ"), rpt1, rpt2, uiStreamId, Fich.getFN()));
 
