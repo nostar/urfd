@@ -70,7 +70,7 @@ protected:
 	void HandleKeepalives(void);
 
 	// stream helpers
-	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &, uint8_t, uint8_t);
+	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &, uint8_t, uint8_t, uint8_t);
 
 	// packet decoding helpers
 	bool IsValidConnectPacket(const CBuffer &, CCallsign *, const CIp &);
@@ -80,7 +80,7 @@ protected:
 	bool IsValidOptionPacket(const CBuffer &, CCallsign *, const CIp &);
 	bool IsValidKeepAlivePacket(const CBuffer &, CCallsign *);
 	bool IsValidRssiPacket(const CBuffer &, CCallsign *, int *);
-	bool IsValidDvHeaderPacket(const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, uint8_t *, uint8_t *);
+	bool IsValidDvHeaderPacket(const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, uint8_t *, uint8_t *, uint8_t *);
 	bool IsValidDvFramePacket(const CIp &, const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, std::array<std::unique_ptr<CDvFramePacket>, 3> &);
 	bool IsValidDvLastFramePacket(const CBuffer &, std::unique_ptr<CDvFramePacket> &);
 
@@ -118,6 +118,9 @@ protected:
 
 	// for authentication
 	uint32_t              m_uiAuthSeed;
+
+    // for debug logging
+    int                   m_debugFrameCount;
 
 	// config data
 	unsigned m_DefaultId;

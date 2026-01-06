@@ -65,6 +65,10 @@ bool CDmrmmdvmProtocol::Initialize(const char *type, const EProtocol ptype, cons
 	::srand((unsigned) time(&t));
 	m_uiAuthSeed = (uint32_t)rand();
 
+    // Debug: Start disabled
+    m_debugFrameCount = 6; 
+    std::cout << "[DEBUG] DMR Burst Logging Enabled (Header + 6 Frames)" << std::endl;
+
 	// done
 	return true;
 }
@@ -82,6 +86,7 @@ void CDmrmmdvmProtocol::Task(void)
 	int       iRssi;
 	uint8_t     Cmd;
 	uint8_t     CallType;
+    uint8_t     uiSlot;
 	std::unique_ptr<CDvHeaderPacket>  Header;
 	std::unique_ptr<CDvFramePacket>   LastFrame;
 	std::array<std::unique_ptr<CDvFramePacket>, 3> Frames;
@@ -98,21 +103,67 @@ void CDmrmmdvmProtocol::Task(void)
 #endif
 	{
 		//Buffer.DebugDump(g_Reflector.m_DebugFile);
+
+        // RAW DEBUG LOGGING (Pre-Validation)
+        // Detect Header to reset counter
+        uint8_t dmrd_tag[] = { 'D','M','R','D' };
+        if (Buffer.size() == 55 && Buffer.Compare(dmrd_tag, 4) == 0) {
+             uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
+             uint8_t uiFrameType = (Buffer.data()[15] & 0x30) >> 4;
+             // Check if it's a Header (DataSync + Header Slot Type)
+             // Need definitions or hardcoded values matching IsValidDvHeaderPacket
+             // DMRMMDVM_FRAMETYPE_DATASYNC=2, MMDVM_SLOTTYPE_HEADER=1
+             if (uiFrameType == 2 && uiSlotType == 1) {
+                 m_debugFrameCount = 0;
+                 std::cout << "[DEBUG-RAW] Header Detected -> Reset Log Counter" << std::endl;
+             }
+        }
+
+        if (m_debugFrameCount < 6) {
+             std::cout << "[DEBUG-RAW] Pkt " << m_debugFrameCount << " Size=" << Buffer.size() << " Data: ";
+             for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+             std::cout << std::endl;
+             
+             // If this wasn't a header (counter 0), increment? 
+             // Or let IsValidDvFramePacket increment?
+             // If validation fails, we won't increment, so we might log infinite "bad" packets.
+             // Let's increment here for "Raw" logging purposes if not 0?
+             // Actually, keep it simple. If valid header, count=0. Then we see it.
+             // If valid frame, increment.
+             // If invalid frame, we verify it arrived.
+             // BUT if we don't increment on invalid frames, we'll spam logs if client sends garbage.
+             // Force increment counter if > 0?
+             if (m_debugFrameCount > 0) m_debugFrameCount++; 
+        }
+
 		// crack the packet
 		if ( IsValidDvFramePacket(Ip, Buffer, Header, Frames) )
 		{
+            if (m_debugFrameCount < 6) {
+                m_debugFrameCount++;
+                std::cout << "[DEBUG] DMR Frame " << m_debugFrameCount << " Size=" << Buffer.size() << " Data: ";
+                for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+                std::cout << std::endl;
+            }
+
 			for ( int i = 0; i < 3; i++ )
 			{
 				OnDvFramePacketIn(Frames.at(i), &Ip);
 			}
 		}
-		else if ( IsValidDvHeaderPacket(Buffer, Header, &Cmd, &CallType) )
+		else if ( IsValidDvHeaderPacket(Buffer, Header, &Cmd, &CallType, &uiSlot) )
 		{
+            // Reset Logging on Header
+            m_debugFrameCount = 0;
+            std::cout << "[DEBUG] DMR Header IN (Reset Log) Size=" << Buffer.size() << " Data: ";
+            for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+            std::cout << std::endl;
+
 			// callsign muted?
 			if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::dmrmmdvm) )
 			{
 				// handle it
-				OnDvHeaderPacketIn(Header, Ip, Cmd, CallType);
+				OnDvHeaderPacketIn(Header, Ip, Cmd, CallType, uiSlot);
 			}
 		}
 		else if ( IsValidDvLastFramePacket(Buffer, LastFrame) )
@@ -267,7 +318,9 @@ void CDmrmmdvmProtocol::Task(void)
 ////////////////////////////////////////////////////////////////////////////////////////
 // streams helpers
 
-void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t cmd, uint8_t CallType)
+// stream helpers
+
+void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t cmd, uint8_t CallType, uint8_t uiSlot)
 {
 	bool lastheard = false;
 
@@ -282,6 +335,10 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 	else
 	{
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Sanitize source callsign (Strip suffixes)
+        my.SetCallsign(my.GetBase(), false); 
+        
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 		// no stream open yet, open a new one
@@ -351,27 +408,18 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 						// So we add subscription first.
 						
 						// Add Subscription (Dynamic)
+						// Add Subscription (Dynamic)
 						unsigned int timeout = g_Configure.GetUnsigned(g_Keys.dmr.timeout);
-						// Slot? Usually assume Slot 2 or from Header? Header has slot info?
-						// CDvHeaderPacket doesn't easily expose slot in args here, passed in?
-						// Header->GetBitField? 
-						// Actually buffer parsing did it.
-						// We don't have slot easily available here except from previous context?
-						// Buffer parsing sets 'header' and 'cmd'.
-						// Mini DMR Mode: Scanner Check
-						// We need to know which slot the user is transmitting on.
-						// The packet doesn't explicitly tell us (it's embedded in obscure bits or implicit).
-						// However, if the user is transmitting on TG X, they MUST be subscribed to TG X.
-						// So we can look up the slot from the scanner!
-						int slot = dmrClient->m_Scanner.GetSubscriptionSlot(tg);
-						if (slot == 0) slot = 2; // Default to TS2 if not found (e.g. initial PTT)
+						
+						// FIX: Use actual slot from packet
+						int slot = uiSlot;
+						if (slot == 0) slot = 2; // Default to TS2 only if slot not resolved (safety)
 
 						// Auto-subscribe if not subscribed? 
-						// If slot was 0, it means not subscribed. We should probably auto-subscribe.
-						// But which slot? Usually TS2 is safe default for Hotspots.
-						if (slot == 2 && dmrClient->m_Scanner.GetSubscriptionSlot(tg) == 0) {
+						// If user is transmitting on 'slot', they want to subscribe on 'slot'.
+						if (dmrClient->m_Scanner.GetSubscriptionSlot(tg) == 0) {
                              // PTT -> Dynamic Subscription (isStatic=false)
- 							 dmrClient->m_Scanner.AddSubscription(tg, 2, timeout, false);
+ 							 dmrClient->m_Scanner.AddSubscription(tg, slot, timeout, false);
 						}
 						
 						// Check Access on the specific slot
@@ -818,11 +866,12 @@ bool CDmrmmdvmProtocol::IsValidRssiPacket(const CBuffer &Buffer, CCallsign *call
 	return valid;
 }
 
-bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique_ptr<CDvHeaderPacket> &header, uint8_t *cmd, uint8_t *CallType)
+bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique_ptr<CDvHeaderPacket> &header, uint8_t *cmd, uint8_t *CallType, uint8_t *Slot)
 {
 	uint8_t tag[] = { 'D','M','R','D' };
 
 	*cmd = CMD_NONE;
+    if (Slot) *Slot = 0; // Init safe value
 
 	if ( (Buffer.size() == 55) && (Buffer.Compare(tag, sizeof(tag)) == 0) )
 	{
@@ -833,7 +882,7 @@ bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique
 		uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
 		//std::cout << (int)uiSlot << std::endl;
 		if ( (uiFrameType == DMRMMDVM_FRAMETYPE_DATASYNC) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
+				//(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
 				(uiSlotType == MMDVM_SLOTTYPE_HEADER) )
 		{
 			// extract sync
@@ -860,6 +909,9 @@ bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique
 
 				// call type
 				*CallType = uiCallType;
+                
+                // Return Slot
+                if (Slot) *Slot = uiSlot;
 
 				// link/unlink command ?
 				if ( uiDstId == 4000 )
@@ -903,7 +955,7 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 		uint8_t uiSlot = (Buffer.data()[15] & 0x80) ? DMR_SLOT2 : DMR_SLOT1;
 		uint8_t uiCallType = (Buffer.data()[15] & 0x40) ? DMR_PRIVATE_CALL : DMR_GROUP_CALL;
 		if ( ((uiFrameType == DMRMMDVM_FRAMETYPE_VOICE) || (uiFrameType == DMRMMDVM_FRAMETYPE_VOICESYNC)) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) && (uiCallType == DMR_GROUP_CALL) )
+				/*(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&*/ (uiCallType == DMR_GROUP_CALL) )
 		{
 			// crack DMR header
 			//uint8_t uiSeqId = Buffer.data()[4];
@@ -957,7 +1009,7 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 				if ( g_GateKeeper.MayTransmit(header->GetMyCallsign(), Ip, EProtocol::dmrmmdvm) )
 				{
 					// handle it
-					OnDvHeaderPacketIn(header, Ip, cmd, uiCallType);
+					OnDvHeaderPacketIn(header, Ip, cmd, uiCallType, uiSlot);
 				}
 			}
 
@@ -1017,7 +1069,7 @@ bool CDmrmmdvmProtocol::IsValidDvLastFramePacket(const CBuffer &Buffer, std::uni
 		uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
 		//std::cout << (int)uiSlot << std::endl;
 		if ( (uiFrameType == DMRMMDVM_FRAMETYPE_DATASYNC) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
+				//(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
 				(uiSlotType == MMDVM_SLOTTYPE_TERMINATOR) )
 		{
 			// extract sync
