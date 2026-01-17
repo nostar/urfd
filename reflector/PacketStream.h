@@ -49,6 +49,7 @@ public:
 	// get
 	std::shared_ptr<CClient> GetOwnerClient(void)   { return m_OwnerClient; }
 	const CIp       *GetOwnerIp(void);
+	std::string      StopRecording(void);
 	bool             IsExpired(void) const          { return (m_LastPacketTime.time() > STREAM_TIMEOUT); }
 	bool             IsOpen(void) const             { return m_bOpen; }
 	uint16_t         GetStreamId(void) const        { return m_uiStreamId; }

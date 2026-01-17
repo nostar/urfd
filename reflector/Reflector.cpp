@@ -98,7 +98,7 @@ bool CReflector::Start(void)
 			// if it's a transcoded module, then we need to initialize the codec stream
 			if (port)
 			{
-				if (std::string::npos != tcmods.find(c))
+				if (std::string::npos != tcmods.find(c) || g_Configure.GetBoolean(g_Keys.audio.enable))
 				{
 					if (stream->InitCodecStream())
 						return true;
@@ -276,7 +276,12 @@ void CReflector::CloseStream(std::shared_ptr<CPacketStream> stream)
 			// notify
 			//OnStreamClose(stream->GetUserCallsign());
 
-			std::cout << "Closing stream of module " << GetStreamModule(stream) << std::endl;
+			// dashboard event
+			std::string recording = stream->StopRecording();
+			GetUsers()->Closing(stream->GetUserCallsign(), GetStreamModule(stream), stream->GetOwnerClient()->GetProtocol(), recording);
+			ReleaseUsers();
+
+			std::cout << "Closing stream of module " << GetStreamModule(stream) << " (Called by CloseStream)" << std::endl;
 		}
 
 		// release clients
@@ -340,9 +345,13 @@ void CReflector::MaintenanceThread()
 	if (g_Configure.Contains(g_Keys.files.json))
 		jsonpath.assign(g_Configure.GetString(g_Keys.files.json));
 	auto tcport = g_Configure.GetUnsigned(g_Keys.tc.port);
-
-	if (xmlpath.empty() && jsonpath.empty())
+	if (xmlpath.empty() && jsonpath.empty() && !g_Configure.GetBoolean(g_Keys.dashboard.enable))
+	{
 		return;	// nothing to do
+	}
+
+	unsigned int nngInterval = g_Configure.GetUnsigned(g_Keys.dashboard.interval);
+	unsigned int nngCounter = 0;
 
 	while (keep_running)
 	{
@@ -383,6 +392,54 @@ void CReflector::MaintenanceThread()
 		// and wait a bit and do something useful at the same time
 		for (int i=0; i< XML_UPDATE_PERIOD*10 && keep_running; i++)
 		{
+			// NNG periodic state update
+			if (g_Configure.GetBoolean(g_Keys.dashboard.enable))
+			{
+				if (++nngCounter >= (nngInterval * 10))
+				{
+					nngCounter = 0;
+					// Removed spammy log: std::cout << "NNG debug: Periodic state broadcast..." << std::endl;
+					nlohmann::json state;
+					state["type"] = "state";
+					JsonReport(state);
+					g_NNGPublisher.Publish(state);
+				}
+                
+                // Log aggregated stats every ~2 minutes (assuming loop runs every 10s * XML_UPDATE_PERIOD=10 = 100s per cycle? No wait)
+                // XML_UPDATE_PERIOD is 10. Loop is XML_UPDATE_PERIOD * 10 = 100 iterations.
+                // Sleep is 100ms. So loop is 10s total.
+                // nngInterval default is 10s.
+                // Reflector.cpp loop logic is:
+                // while(keep_running) {
+                //   Update XML/JSON
+                //   for (10s) { 
+                //     update NNG state
+                //     check TC
+                //     sleep(100ms)
+                //   }
+                // }
+                // So the outer loop runs every 10s.
+                // To get ~2 minutes, we can use a static counter in the outer loop or piggyback here.
+                // Let's use a static counter inside the loop or check 'i' (which resets every 10s).
+                // Easier: add a static counter to MaintenanceThread or verify nngCounter.
+			}
+            
+            // New Aggregated Stats Logic
+            // Log every 1200 iterations (1200 * 100ms = 120s = 2 mins)
+            static int statsCounter = 0;
+            if (++statsCounter >= 1200) {
+               statsCounter = 0;
+               std::string nngStats = g_NNGPublisher.GetAndClearStats();
+               std::string tcStats = g_TCServer.GetAndClearStats();
+               
+               if (!nngStats.empty() || !tcStats.empty()) {
+                   std::cout << "Stats: ";
+                   if (!nngStats.empty()) std::cout << "NNG [" << nngStats << "] ";
+                   if (!tcStats.empty()) std::cout << "TCD [" << tcStats << "]";
+                   std::cout << std::endl;
+               }
+            }
+
 			if (tcport && g_TCServer.AnyAreClosed())
 			{
 				if (g_TCServer.Accept())
@@ -391,6 +448,7 @@ void CReflector::MaintenanceThread()
 					abort();
 				}
 			}
+
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 	}
@@ -406,6 +464,16 @@ std::shared_ptr<CPacketStream> CReflector::GetStream(char module)
 		return it->second;
 
 	return nullptr;
+}
+
+bool CReflector::IsAnyStreamOpen()
+{
+	for (auto it=m_Stream.begin(); it!=m_Stream.end(); it++)
+	{
+		if ( it->second->IsOpen() )
+			return true;
+	}
+	return false;
 }
 
 bool CReflector::IsStreamOpen(const std::unique_ptr<CDvHeaderPacket> &DvHeader)
@@ -456,6 +524,18 @@ void CReflector::JsonReport(nlohmann::json &report)
 	for (auto uid=users->begin(); uid!=users->end(); uid++)
 		(*uid).JsonReport(report);
 	ReleaseUsers();
+
+	report["ActiveTalkers"] = nlohmann::json::array();
+	for (auto const& [module, stream] : m_Stream)
+	{
+		if (stream->IsOpen())
+		{
+			nlohmann::json jactive;
+			jactive["Module"] = std::string(1, module);
+			jactive["Callsign"] = stream->GetUserCallsign().GetCS();
+			report["ActiveTalkers"].push_back(jactive);
+		}
+	}
 }
 
 void CReflector::WriteXmlFile(std::ofstream &xmlFile)

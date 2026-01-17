@@ -180,6 +180,10 @@ void CDplusProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header
 	{
 		// no stream open yet, open a new one
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Sanitize source callsign (Strip suffixes)
+        my.SetCallsign(my.GetBase(), false); 
+
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 
@@ -213,7 +217,7 @@ void CDplusProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header
 			g_Reflector.ReleaseClients();
 
 			// update last heard
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::dplus);
 			g_Reflector.ReleaseUsers();
 		}
 		else

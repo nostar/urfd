@@ -1,19 +1,3 @@
-// urfd -- The universal reflector
-// Copyright © 2024 Thomas A. Early N7TAE
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #pragma once
 
 #include <string>
@@ -22,32 +6,83 @@
 #include <vector>
 #include <queue>
 #include <memory>
-#include <poll.h>
+#include <thread>
+#include <condition_variable>
+#include <map>
+#include <atomic>
+#include <set>
+#include <sstream>
+#include <nng/nng.h>
+#include <nng/protocol/pair1/pair.h>
 
-#include "IP.h"
 #include "TCPacketDef.h"
+
+// Specialized thread-safe queue for STCPacket by value, avoiding template conflict
+class CTCPacketQueue {
+    std::queue<STCPacket> q;
+    std::mutex m;
+    std::condition_variable cv;
+public:
+    void Push(const STCPacket& p) {
+        std::lock_guard<std::mutex> l(m);
+        q.push(p);
+        cv.notify_one();
+    }
+    bool Pop(STCPacket& p, int ms) {
+        std::unique_lock<std::mutex> l(m);
+        // Wait up to ms if queue is empty
+        if (q.empty()) {
+            if (ms <= 0) return false;
+            // wait_for returns false if timeout, true if predicate is true
+            if (!cv.wait_for(l, std::chrono::milliseconds(ms), [this]{ return !q.empty(); })) {
+                return false; // timeout
+            }
+        }
+        
+        p = q.front();
+        q.pop();
+        return true;
+    }
+};
 
 class CTCSocket
 {
 public:
-	CTCSocket() {}
-	virtual ~CTCSocket() { Close(); }
+	CTCSocket();
+	virtual ~CTCSocket();
 
 	virtual bool Open(const std::string &address, const std::string &modules, uint16_t port) = 0;
-	void Close(); // close all open sockets
-	void Close(char module); // close a specific module
-	void Close(int fd); // close a specific file descriptor
+	void Close(); 
+	void Close(char module); 
 
-	// All bool functions, except Server Receive, return true if there was an error
 	bool Send(const STCPacket *packet);
 
-	int GetFD(char module) const; // can return -1!
-	char GetMod(int fd) const;
+	bool IsConnected(char module) const;
+    int GetFD(char module) const; // Legacy compat: returns 1 if connected, -1 if not
+    
+    std::string GetAndClearStats();
 
 protected:
-	bool receive(int fd, STCPacket *packet);
-	std::vector<struct pollfd> m_Pfd;
+    nng_socket m_Sock;
+    std::thread m_Thread;
+    std::atomic<bool> m_Running;
+    std::atomic<bool> m_Connected;
 	std::string m_Modules;
+
+    // Per-module input queues
+    std::map<char, std::shared_ptr<CTCPacketQueue>> m_Queues;
+    // Client queue (receives all)
+    // Client queue (receives all)
+    std::shared_ptr<CTCPacketQueue> m_ClientQueue;
+
+    // Track seen modules for logging
+    std::set<char> m_SeenModules;
+    
+    // Packet counters
+    std::map<char, int> m_PacketCounts;
+    std::mutex m_StatsMutex;
+
+    void Dispatcher();
 };
 
 class CTCServer : public CTCSocket
@@ -56,27 +91,17 @@ public:
 	CTCServer() : CTCSocket() {}
 	~CTCServer() {}
 	bool Open(const std::string &address, const std::string &modules, uint16_t port);
-	// Returns true if there is data
 	bool Receive(char module, STCPacket *packet, int ms);
 	bool AnyAreClosed() const;
-	bool Accept();
-
-private:
-	CIp m_Ip;
-	bool acceptone(int fd);
+	bool Accept(); // Checks NNG state
 };
 
 class CTCClient : public CTCSocket
 {
 public:
-	CTCClient() : CTCSocket(), m_Port(0) {}
+	CTCClient() : CTCSocket() {}
 	~CTCClient() {}
 	bool Open(const std::string &address, const std::string &modules, uint16_t port);
 	void Receive(std::queue<std::unique_ptr<STCPacket>> &queue, int ms);
-	void ReConnect();
-
-private:
-	std::string m_Address;
-	uint16_t m_Port;
-	bool Connect(char module);
+	void ReConnect(); // No-op in NNG
 };

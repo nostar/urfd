@@ -23,6 +23,7 @@
 #include "P25Protocol.h"
 
 #include "Global.h"
+#include "Global.h"
 
 const uint8_t REC62[] = {0x62U, 0x02U, 0x02U, 0x0CU, 0x0BU, 0x12U, 0x64U, 0x00U, 0x00U, 0x80U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,0x00U, 0x00U, 0x00U, 0x00U, 0x00U};
 const uint8_t REC63[] = {0x63U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x02U};
@@ -94,16 +95,26 @@ void CP25Protocol::Task(void)
 		// crack the packet
 		if ( IsValidDvPacket(Ip, Buffer, Frame) )
 		{
-			if( !m_uiStreamId && IsValidDvHeaderPacket(Ip, Buffer, Header) )
-			{
-				// callsign muted?
-				if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::p25) )
-				{
-					OnDvHeaderPacketIn(Header, Ip);
-				}
-			}
-			// push the packet
-			OnDvFramePacketIn(Frame, &Ip);
+			    if( !m_uiStreamId && IsValidDvHeaderPacket(Ip, Buffer, Header) )
+			    {
+				    // callsign muted?
+				    if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::p25) )
+				    {
+					    OnDvHeaderPacketIn(Header, Ip);
+                        
+                        // Fix Header Orphan: If Header packet 0x66 was also parsed as a Frame with ID 0,
+                        // update its ID now that stream is open (m_uiStreamId is set).
+                        if (Frame && Frame->GetStreamId() == 0 && m_uiStreamId != 0) {
+                            // Recreate frame with correct ID
+                            // We know the offset for 0x66 is 5U.
+                            int offset = 5U; // For 0x66
+                            bool last = false; 
+                            Frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
+                        }
+				    }
+			    }
+			    // push the packet
+			    OnDvFramePacketIn(Frame, &Ip);
 		}
 		else if ( IsValidConnectPacket(Buffer, &Callsign) )
 		{
@@ -196,6 +207,10 @@ void CP25Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 	{
 		// no stream open yet, open a new one
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Sanitize source callsign (Strip suffixes)
+        my.SetCallsign(my.GetBase(), false); 
+
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 
@@ -219,7 +234,7 @@ void CP25Protocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::p25);
 		g_Reflector.ReleaseUsers();
 	}
 }
@@ -351,9 +366,16 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 		case 0x73U:
 			offset = 4U;
 			break;
-		case 0x80U:
+        case 0x80U:
+		{
 			last = true;
+            uint32_t lastId = m_uiStreamId; // Capture ID before reset
 			m_uiStreamId = 0;
+            
+             // Override creation with lastId 
+            frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[0U]), lastId, last));
+            return true; 
+		}
 			break;
 		default:
 			break;

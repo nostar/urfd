@@ -30,6 +30,24 @@
 #include "Global.h"
 #include "CurlGet.h"
 
+// string trim helpers
+static inline void ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
+
+static inline void rtrim(std::string &s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+static inline void trim(std::string &s) {
+    ltrim(s);
+    rtrim(s);
+}
+
 // ini file keywords
 #define JAUTOLINKMODULE          "AutoLinkModule"
 #define JBINDINGADDRESS          "BindingAddress"
@@ -38,6 +56,7 @@
 #define JBRANDMEISTER            "Brandmeister"
 #define JCALLSIGN                "Callsign"
 #define JCOUNTRY                 "Country"
+#define JDASHBOARD               "Dashboard"
 #define JDASHBOARDURL            "DashboardUrl"
 #define JDCS                     "DCS"
 #define JDEFAULTID               "DefaultId"
@@ -58,10 +77,12 @@
 #define JIPADDRESSES             "IP Addresses"
 #define JIPV4BINDING             "IPv4Binding"
 #define JIPV4EXTERNAL            "IPv4External"
+#define JIMRS                   "IMRS"
 #define JIPV6BINDING             "IPv6Binding"
 #define JIPV6EXTERNAL            "IPv6External"
 #define JJSONPATH                "JsonPath"
 #define JM17                     "M17"
+#define JM17LEGACYCOMPAT         "M17LegacyCompat"
 #define JMMDVM                   "MMDVM"
 #define JMODE                    "Mode"
 #define JMODULE                  "Module"
@@ -88,8 +109,11 @@
 #define JUSRP                    "USRP"
 #define JWHITELISTPATH           "WhitelistPath"
 #define JXMLPATH                 "XmlPath"
+#define JYSFAUTOLINKMOD          "AutoLinkModule"
+#define JAUDIO                   "Audio"
 #define JYSF                     "YSF"
 #define JYSFTXRXDB               "YSF TX/RX DB"
+#define JDMR                     "DMR"
 
 static inline void split(const std::string &s, char delim, std::vector<std::string> &v)
 {
@@ -99,30 +123,24 @@ static inline void split(const std::string &s, char delim, std::vector<std::stri
 		v.push_back(item);
 }
 
-// trim from start (in place)
-static inline void ltrim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](int ch) {
-        return !std::isspace(ch);
-    }));
-}
-
-// trim from end (in place)
-static inline void rtrim(std::string &s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](int ch) {
-        return !std::isspace(ch);
-    }).base(), s.end());
-}
-
-// trim from both ends (in place)
-static inline void trim(std::string &s) {
-    ltrim(s);
-    rtrim(s);
-}
+// ... (unchanged trim functions) ...
 
 CConfigure::CConfigure()
 {
 	IPv4RegEx = std::regex("^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3,3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9]){1,1}$", std::regex::extended);
 	IPv6RegEx = std::regex("^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}(:[0-9a-fA-F]{1,4}){1,1}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|([0-9a-fA-F]{1,4}:){1,1}(:[0-9a-fA-F]{1,4}){1,6}|:((:[0-9a-fA-F]{1,4}){1,7}|:))$", std::regex::extended);
+
+	data[g_Keys.dashboard.nngaddr] = "tcp://127.0.0.1:5555";
+	data[g_Keys.dashboard.interval] = 10U;
+	data[g_Keys.dashboard.enable] = false;
+	data[g_Keys.dashboard.debug] = false;
+	data[g_Keys.ysf.ysfreflectordb.id] = 0U;
+
+	// DMR defaults
+	data[g_Keys.dmr.xlx] = true;
+	data[g_Keys.dmr.single] = false;
+	data[g_Keys.dmr.timeout] = 600U;
+	data[g_Keys.dmr.hold] = 5U;
 }
 
 bool CConfigure::ReadData(const std::string &path)
@@ -184,6 +202,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::ip;
 			else if (0 == hname.compare(JTRANSCODER))
 				section = ESection::tc;
+			else if (0 == hname.compare(JDASHBOARD))
+				section = ESection::dashboard;
 			else if (0 == hname.compare(JMODULES))
 				section = ESection::modules;
 			else if (0 == hname.compare(JDPLUS))
@@ -192,6 +212,8 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::dextra;
 			else if (0 == hname.compare(JG3))
 				section = ESection::g3;
+			else if (0 == hname.compare(JIMRS))
+				section = ESection::imrs;
 			else if (0 == hname.compare(JDMRPLUS))
 				section = ESection::dmrplus;
 			else if (0 == hname.compare(JMMDVM))
@@ -220,6 +242,10 @@ bool CConfigure::ReadData(const std::string &path)
 				section = ESection::ysffreq;
 			else if (0 == hname.compare(JFILES))
 				section = ESection::files;
+			else if (0 == hname.compare(JAUDIO))
+				section = ESection::audio;
+			else if (0 == hname.compare(JDMR))
+				section = ESection::dmr;
 			else
 			{
 				std::cerr << "WARNING: unknown ini file section: " << line << std::endl;
@@ -354,6 +380,14 @@ bool CConfigure::ReadData(const std::string &path)
 				else
 					badParam(key);
 				break;
+			case ESection::imrs:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.imrs.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare(JPORT))
+					data[g_Keys.imrs.port] = getUnsigned(value, "IMRS Port", 1024, 65535, 21110);
+				else
+					badParam(key);
+				break;
 			case ESection::dmrplus:
 				if (0 == key.compare(JPORT))
 					data[g_Keys.dmrplus.port] = getUnsigned(value, "DMRPlus Port", 1024, 65535, 8880);
@@ -369,6 +403,8 @@ bool CConfigure::ReadData(const std::string &path)
 			case ESection::m17:
 				if (0 == key.compare(JPORT))
 					data[g_Keys.m17.port] = getUnsigned(value, "M17 Port", 1024, 65535, 17000);
+				else if (0 == key.compare(JM17LEGACYCOMPAT))
+				    data[g_Keys.m17.compat] = IS_TRUE(value[0]);
 				else
 					badParam(key);
 				break;
@@ -495,6 +531,49 @@ bool CConfigure::ReadData(const std::string &path)
 					data[g_Keys.files.interlink] = value;
 				else if (0 == key.compare(JG3TERMINALPATH))
 					data[g_Keys.files.terminal] = value;
+				else
+					badParam(key);
+				break;
+			case ESection::dashboard:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.dashboard.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare("NNGAddr"))
+					data[g_Keys.dashboard.nngaddr] = value;
+				else if (0 == key.compare("Interval"))
+					data[g_Keys.dashboard.interval] = getUnsigned(value, "Dashboard Interval", 1, 3600, 10);
+				else if (0 == key.compare("NNGDebug"))
+					data[g_Keys.dashboard.debug] = IS_TRUE(value[0]);
+				else
+					badParam(key);
+				break;
+			case ESection::audio:
+				if (0 == key.compare(JENABLE))
+					data[g_Keys.audio.enable] = IS_TRUE(value[0]);
+				else if (0 == key.compare("Path") || 0 == key.compare("path"))
+					data[g_Keys.audio.path] = value;
+				else
+					badParam(key);
+				break;
+			case ESection::dmr:
+				if (0 == key.compare(g_Keys.dmr.xlx))
+					data[g_Keys.dmr.xlx] = IS_TRUE(value[0]);
+				else if (0 == key.compare(g_Keys.dmr.single))
+					data[g_Keys.dmr.single] = IS_TRUE(value[0]);
+				else if (0 == key.compare(g_Keys.dmr.timeout))
+					data[g_Keys.dmr.timeout] = getUnsigned(value, "DMR Timeout", 30, 86400, 600);
+				else if (0 == key.compare(g_Keys.dmr.hold))
+					data[g_Keys.dmr.hold] = getUnsigned(value, "DMR Hold Time", 0, 60, 5);
+				else if (0 == key.compare(0, g_Keys.dmr.map_prefix.length(), g_Keys.dmr.map_prefix))
+				{
+					// Parse MapA, MapB, etc.
+					if (key.length() == g_Keys.dmr.map_prefix.length() + 1 && isupper(key.back()))
+					{
+						// Store custom mapping: "MapA" -> 4001
+						data[key] = getUnsigned(value, key, 0, 16777215, 0);
+					}
+					else
+						badParam(key);
+				}
 				else
 					badParam(key);
 				break;
@@ -687,6 +766,11 @@ bool CConfigure::ReadData(const std::string &path)
 	isDefined(ErrorLevel::fatal, JDMRPLUS, JPORT, g_Keys.dmrplus.port, rval);
 	isDefined(ErrorLevel::fatal, JDPLUS, JPORT, g_Keys.dplus.port, rval);
 	isDefined(ErrorLevel::fatal, JM17, JPORT, g_Keys.m17.port, rval);
+	if (data.contains(g_Keys.m17.compat))
+		data[g_Keys.m17.compat] = GetBoolean(g_Keys.m17.compat);
+	else
+	    data[g_Keys.m17.compat] = true; // Default to Legacy Mode (54 bytes) for compatibility
+
 	isDefined(ErrorLevel::fatal, JURF, JPORT, g_Keys.urf.port, rval);
 
 	// BM
@@ -801,6 +885,10 @@ bool CConfigure::ReadData(const std::string &path)
 		if (isDefined(ErrorLevel::fatal, JFILES, JG3TERMINALPATH, g_Keys.files.terminal, rval))
 			checkFile(JFILES, JG3TERMINALPATH, data[g_Keys.files.terminal]);
 	}
+	// Dashboard section
+	isDefined(ErrorLevel::mild, JDASHBOARD, JENABLE, g_Keys.dashboard.enable, rval);
+	isDefined(ErrorLevel::mild, JDASHBOARD, "NNGAddr", g_Keys.dashboard.nngaddr, rval);
+	isDefined(ErrorLevel::mild, JDASHBOARD, "Interval", g_Keys.dashboard.interval, rval);
 
 	return rval;
 }

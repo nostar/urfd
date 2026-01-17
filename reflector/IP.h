@@ -42,10 +42,15 @@ public:
 
 	// comparison operators
 	bool operator==(const CIp &rhs) const;
+	// comparison operators
 	bool operator!=(const CIp &rhs) const;
+    bool operator<(const CIp &rhs) const;
+
 
 	// state methods
-	bool IsSet() const { return is_set; }
+	bool IsSet() const { 	return is_set;
+}
+
 	bool AddressIsZero() const;
 	void ClearAddress();
 	const char *GetAddress() const;

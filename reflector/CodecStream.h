@@ -23,6 +23,7 @@
 
 #include "DVFramePacket.h"
 #include "SafePacketQueue.h"
+#include "AudioRecorder.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // class
@@ -38,6 +39,12 @@ public:
 
 	void ResetStats(uint16_t streamid, ECodecType codectype);
 	void ReportStats();
+	std::string StopRecording() { 
+		if (!m_Recorder.IsRecording()) return "";
+		std::string f = m_Filename; // This is actually CCodecStream::m_Filename set in ResetStats
+		m_Recorder.Stop(); 
+		return f; 
+	}
 
 	// destructor
 	virtual ~CCodecStream();
@@ -46,8 +53,9 @@ public:
 	uint16_t GetStreamId(void) const          { return m_uiStreamId; }
 
 	// task
-	void Thread(void);
-	void Task(void);
+	void RxThread(void);
+	void TxThread(void);
+	void Task(void); // Kept for legacy structure if needed, but likely RxThread will absorb it
 
 	// pass-through
 	void Push(std::unique_ptr<CDvFramePacket> p) { m_Queue.Push(std::move(p)); }
@@ -72,6 +80,7 @@ protected:
 	// thread
 	std::atomic<bool> keep_running;
 	std::future<void> m_Future;
+	std::future<void> m_TxFuture;
 
 	// statistics
 	double       m_RTMin;
@@ -79,4 +88,8 @@ protected:
 	double       m_RTSum;
 	unsigned int m_RTCount;
 	uint32_t     m_uiTotalPackets;
+
+	// Recording
+	CAudioRecorder m_Recorder;
+	std::string    m_Filename;
 };

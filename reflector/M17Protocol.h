@@ -1,5 +1,5 @@
 //  Copyright © 2015 Jean-Luc Deltombe (LX3JL). All rights reserved.
-
+//
 // urfd -- The universal reflector
 // Copyright © 2021 Thomas A. Early N7TAE
 //
@@ -21,12 +21,22 @@
 #include "Defines.h"
 #include "Timer.h"
 #include "Protocol.h"
+#include "SEProtocol.h"
 #include "DVHeaderPacket.h"
 #include "DVFramePacket.h"
 #include "M17CRC.h"
 
+#include <map>
+#include <string>
+#include <memory>
+#include <unordered_map>
+
 ////////////////////////////////////////////////////////////////////////////////////////
 // define
+
+////////////////////////////////////////////////////////////////////////////////////////
+// forward declarations
+class CParrot;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // class
@@ -40,14 +50,29 @@ public:
 	uint32_t        m_iSeqCounter;
 };
 
-class CM17Protocol : public CProtocol
+class CM17Protocol : public CSEProtocol
 {
 public:
+	// constructors
+	CM17Protocol();
+
+	// destructor
+	virtual ~CM17Protocol() {}
+
 	// initialization
 	bool Initialize(const char *type, const EProtocol ptype, const uint16_t port, const bool has_ipv4, const bool has_ipv6);
 
-	// task
+	// protocol
 	void Task(void);
+
+	// packet encoding helpers (public for Parrot access)
+	void Send(const CBuffer &buf, const CIp &Ip) const { CProtocol::Send(buf, Ip); }
+	void Send(const char    *buf, const CIp &Ip) const { CProtocol::Send(buf, Ip); }
+
+
+
+	virtual bool EncodeDvHeaderPacket(const CDvHeaderPacket &, CBuffer &) const override;
+	virtual bool EncodeDvFramePacket(const CDvFramePacket &, CBuffer &) const override;
 
 protected:
 	// queue helper
@@ -58,16 +83,23 @@ protected:
 
 	// stream helpers
 	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &);
+	virtual void OnDvFramePacketIn(std::unique_ptr<CDvFramePacket> &, const CIp * = nullptr) override;
 
+private:
 	// packet decoding helpers
 	bool IsValidConnectPacket(const CBuffer &, CCallsign &, char &);
+	bool IsValidListenPacket(const CBuffer &, CCallsign &, char &);
 	bool IsValidDisconnectPacket(const CBuffer &, CCallsign &);
 	bool IsValidKeepAlivePacket(const CBuffer &, CCallsign &);
+	bool IsValidPacketModePacket(const CBuffer &, CCallsign &, CCallsign &);
 	bool IsValidDvPacket(const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, std::unique_ptr<CDvFramePacket> &);
 
 	// packet encoding helpers
 	void EncodeKeepAlivePacket(CBuffer &);
-	void EncodeM17Packet(SM17Frame &, const CDvHeaderPacket &, const CDvFramePacket *, uint32_t) const;
+	void EncodeM17Packet(CM17Packet &packet, const CDvHeaderPacket &, const CDvFramePacket *, uint32_t) const;
+
+	// parrot
+	void HandleParrot(const CIp &Ip, const CBuffer &Buffer, bool isStream);
 
 protected:
 	// for keep alive
@@ -78,4 +110,5 @@ protected:
 
 private:
 	CM17CRC m17crc;
+    std::map<std::string, std::shared_ptr<CParrot>> m_ParrotMap;
 };

@@ -139,22 +139,12 @@ bool CCallsign::IsValid(void) const
 	bool valid = true;
 	int i;
 
-	// callsign
-	// first 3 chars are letter or number but cannot be all number
-	int iNum = 0;
-	for ( i = 0; i < 3; i++ )
+	// check callsign characters (Letter, Number, Space, -, ., /)
+	// We allow this for all positions to support M17 and numeric IDs
+	// Also allow # at the beginning for special M17 addresses
+	for ( i = 0; i < CALLSIGN_LEN; i++ )
 	{
-		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]));
-		if ( IsNumber(m_Callsign.c[i]) )
-		{
-			iNum++;
-		}
-	}
-	valid = valid && (iNum < 3);
-	// all remaining char are letter, number or space
-	for ( ; i < CALLSIGN_LEN; i++)
-	{
-		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]));
+		valid = valid && (IsLetter(m_Callsign.c[i]) || IsNumber(m_Callsign.c[i]) || IsSpace(m_Callsign.c[i]) || m_Callsign.c[i] == '-' || m_Callsign.c[i] == '.' || m_Callsign.c[i] == '/' || (i==0 && m_Callsign.c[i] == '#'));
 	}
 
 	// prefix
@@ -251,13 +241,40 @@ void CCallsign::SetDmrid(uint32_t dmrid, bool UpdateCallsign)
 	m_uiDmrid = dmrid;
 	if ( UpdateCallsign )
 	{
+		const UCallsign *callsign = nullptr;
 		g_LDid.Lock();
-		{
-			auto callsign = g_LDid.FindCallsign(dmrid);
-			if ( callsign != nullptr )
-			{
-				m_Callsign.l = callsign->l;
+		callsign = g_LDid.FindCallsign(dmrid);
+		
+		// Attempt Extended SSID Lookup (e.g. 3xxxxxx01)
+		if (callsign == nullptr && dmrid > 9999999) {
+			uint32_t baseId = dmrid / 100;
+			callsign = g_LDid.FindCallsign(baseId);
+			if (callsign) {
+				// Base Found, set suffix
+				char suffix[3];
+				snprintf(suffix, 3, "%02u", dmrid % 100);
+				SetSuffix(suffix);
 			}
+		}
+		
+		if ( callsign != nullptr )
+		{
+			m_Callsign.l = callsign->l;
+		}
+		else
+		{
+			// Fallback: Use ID as callsign string if unknown
+			char idBase[CALLSIGN_LEN + 1];
+			snprintf(idBase, CALLSIGN_LEN + 1, "%u", dmrid);
+			// Pad with spaces
+			size_t len = strlen(idBase);
+			if (len < CALLSIGN_LEN) {
+				memset(idBase + len, ' ', CALLSIGN_LEN - len);
+				idBase[CALLSIGN_LEN] = 0;
+			}
+            UCallsign uc;
+            memcpy(uc.c, idBase, CALLSIGN_LEN);
+			m_Callsign.l = uc.l;
 		}
 		g_LDid.Unlock();
 		CSIn();
@@ -483,16 +500,55 @@ void CCallsign::CodeIn(const uint8_t *in)
 	m_coded = in[0];
 	for (int i=1; i<6; i++)
 		m_coded = (m_coded << 8) | in[i];
-	if (m_coded > 0xee6b27ffffffu) {
-		std::cerr << "Callsign code is too large, 0x" << std::hex << m_coded << std::dec << std::endl;
+	if (m_coded > 0xf46108ffffffu) {
+		SetCallsign("@INVALID");
 		return;
 	}
 	auto c = m_coded;
 	int i = 0;
+	if (m_coded > 0xee6b27ffffffu) {
+		cs[i++] = '#';
+		c -= 0xee6b28000000u;
+	}
 	while (c) {
 		cs[i++] = m17_alphabet[c % 40];
 		c /= 40;
 	}
+	
+	// Check if numeric (DMR ID?)
+	bool isNumeric = (i > 0);
+	for (int j=0; j<i; j++) {
+		if (!IsNumber(cs[j])) {
+			isNumeric = false;
+			break;
+		}
+	}
+
+	if (isNumeric) {
+		uint32_t id = strtoul(cs, nullptr, 10);
+		if (id > 0) {
+			const UCallsign *pItem = nullptr;
+			g_LDid.Lock();
+			pItem = g_LDid.FindCallsign(id);
+			if (pItem) {
+				// Found a callsign, use it
+				char buf[CALLSIGN_LEN+1];
+				memcpy(buf, pItem->c, CALLSIGN_LEN);
+				buf[CALLSIGN_LEN] = 0;
+				// remove trailing spaces
+				for(int k=CALLSIGN_LEN-1; k>=0; k--) {
+					if (buf[k] == ' ') buf[k] = 0;
+					else break;
+				}
+				strcpy(cs, buf);
+			} else {
+				// Not found, use default
+				strcpy(cs, "N0CALL");
+			}
+			g_LDid.Unlock();
+		}
+	}
+
 	SetCallsign(cs);
 }
 
@@ -518,6 +574,10 @@ void CCallsign::CSIn()
 	for( int i=CALLSIGN_LEN-2; i>=0; i-- ) {
 		pos = m17_alphabet.find(m_Callsign.c[i]);
 		if (pos == std::string::npos) {
+			if ('#' == m_Callsign.c[i] && 0 == i) {
+				m_coded += 0xee6b28000000u;
+				break;
+			}
 			pos = 0;
 		}
 		m_coded *= 40;

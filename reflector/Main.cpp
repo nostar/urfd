@@ -33,6 +33,7 @@ CLookupDmr  g_LDid;
 CLookupNxdn g_LNid;
 CLookupYsf  g_LYtr;
 CTCServer   g_TCServer;
+CNNGPublisher g_NNGPublisher;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -49,18 +50,24 @@ int main(int argc, char *argv[])
 
 	std::cout << "IPv4 binding address is '" << g_Configure.GetString(g_Keys.ip.ipv4bind) << "'" << std::endl;
 	// remove pidfile
-	const std::string pidpath(g_Configure.GetString(g_Keys.files.pid));
+	std::string pidpath = g_Configure.GetString(g_Keys.files.pid);
 	const std::string callsign(g_Configure.GetString(g_Keys.names.callsign));
 	remove(pidpath.c_str());
 
 	// splash
 	std::cout << "Starting " << callsign << " " << g_Version << std::endl;
 
-	// and let it run
+	// start everything
 	if (g_Reflector.Start())
 	{
 		std::cout << "Error starting reflector" << std::endl;
 		return EXIT_FAILURE;
+	}
+
+	// dashboard nng publisher
+	if (g_Configure.GetBoolean(g_Keys.dashboard.enable))
+	{
+		g_NNGPublisher.Start(g_Configure.GetString(g_Keys.dashboard.nngaddr));
 	}
 
 	std::cout << "Reflector " << callsign << " started and listening" << std::endl;
@@ -72,6 +79,7 @@ int main(int argc, char *argv[])
 
 	pause(); // wait for any signal
 
+	g_NNGPublisher.Stop();
 	g_Reflector.Stop();
 	std::cout << "Reflector stopped" << std::endl;
 

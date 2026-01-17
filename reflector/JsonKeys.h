@@ -26,15 +26,21 @@ struct SJsonKeys {
 	dcs { "DCSPort" },
 	dextra { "DExtraPort" },
 	dmrplus { "DMRPlusPort" },
-	dplus { "DPlusPort" },
-	m17 { "M17Port" },
-	urf { "URFPort" };
+	dplus { "DPlusPort" };
+
+	struct { const std::string port, compat; }
+	m17 { "M17Port", "M17LegacyCompat" };
+
+	PORTONLY urf { "URFPort" };
 
 	struct G3 { const std::string enable; }
 	g3 { "G3Enable" };
 
 	struct BM { const std::string enable, port; }
 	bm { "bmEnable", "bmPort" };
+
+	struct IMRS { const std::string enable, port; }
+	imrs { "IMRSEnable", "IMRSPort" };
 
 	struct MMDVM { const std::string port, defaultid; }
 	mmdvm { "MMDVMPort", "mmdvmdefaultid" };
@@ -51,6 +57,9 @@ struct SJsonKeys {
 	struct MODULES { const std::string modules, descriptor[26]; }
 	modules { "Modules",
 		"DescriptionA", "DescriptionB", "DescriptionC", "DescriptionD", "DescriptionE", "DescriptionF", "DescriptionG", "DescriptionH", "DescriptionI", "DescriptionJ", "DescriptionK", "DescriptionL", "DescriptionM", "DescriptionN", "DescriptionO", "DescriptionP", "DescriptionQ", "DescriptionR", "DescriptionS", "DescriptionT", "DescriptionU", "DescriptionV", "DescriptionW", "DescriptionX", "DescriptionY", "DescriptionZ" };
+
+	struct AUDIO { const std::string enable, path; }
+	audio { "AudioEnable", "AudioPath" };
 
 	struct USRP { const std::string enable, ip, txport, rxport, module, callsign, filepath; }
 	usrp { "usrpEnable", "usrpIpAddress", "urspTxPort", "usrpRxPort", "usrpModule", "usrpCallsign", "usrpFilePath" };
@@ -71,4 +80,10 @@ struct SJsonKeys {
 
 	struct FILES { const std::string pid, xml, json, white, black, interlink, terminal; }
 	files { "pidFilePath", "xmlFilePath", "jsonFilePath", "whitelistFilePath", "blacklistFilePath", "interlinkFilePath", "g3TerminalFilePath" };
+
+	struct DASHBOARD { const std::string enable, nngaddr, interval, debug; }
+	dashboard { "DashboardEnable", "DashboardNNGAddr", "DashboardInterval", "NNGDebug" };
+
+	struct DMR { const std::string xlx, single, timeout, hold, map_prefix; }
+	dmr { "XlxCompatibility", "SingleMode", "DefaultTimeout", "HoldTime", "Map" };
 };

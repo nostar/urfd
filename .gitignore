@@ -5,3 +5,9 @@ reflector/urfd.*
 urfd
 inicheck
 dbutil
+.devcontainer/
+/test_urfd.ini
+/staging_urfd.ini
+/pr_comment_nng.md
+/pr_body_fix.md
+/staging/

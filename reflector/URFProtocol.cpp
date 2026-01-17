@@ -392,6 +392,10 @@ void CURFProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 	else
 	{
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Critical Fix: Sanitize source callsign to strip suffixes (e.g. "KF8S D" -> "KF8S")
+        my.SetCallsign(my.GetBase(), false);
+
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 		// no stream open yet, open a new one
@@ -411,7 +415,9 @@ void CURFProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		// release
 		g_Reflector.ReleaseClients();
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, peer);
+        CCallsign xlx = rpt2;
+        xlx.SetCSModule(Header->GetRpt2Module());
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, xlx, EProtocol::urf);
 		g_Reflector.ReleaseUsers();
 	}
 }

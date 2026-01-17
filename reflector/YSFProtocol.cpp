@@ -42,7 +42,6 @@ bool CYsfProtocol::Initialize(const char *type, const EProtocol ptype, const uin
 {
 	// config data
 	m_AutolinkModule = g_Configure.GetAutolinkModule(g_Keys.ysf.autolinkmod);
-	m_EnableDGID = g_Configure.GetBoolean(g_Keys.ysf.enabledgid);
 	m_RegistrationId = g_Configure.GetUnsigned(g_Keys.ysf.ysfreflectordb.id);
 	m_RegistrationName.assign(g_Configure.GetString(g_Keys.ysf.ysfreflectordb.name));
 	m_RegistrationDesc.assign(g_Configure.GetString(g_Keys.ysf.ysfreflectordb.description));
@@ -131,7 +130,7 @@ void CYsfProtocol::Task(void)
 				if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::ysf, Header->GetRpt2Module())  )
 				{
 					// handle it
-					OnDvHeaderPacketIn(Header, Ip, Fich.getSQ());
+					OnDvHeaderPacketIn(Header, Ip);
 					//OnDvFramePacketIn(Frames[0], &Ip);
 					//OnDvFramePacketIn(Frames[1], &Ip);
 				}
@@ -253,7 +252,7 @@ void CYsfProtocol::Task(void)
 ////////////////////////////////////////////////////////////////////////////////////////
 // streams helpers
 
-void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t dgid)
+void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t)
 {
 	// find the stream
 	auto stream = GetStream(Header->GetStreamId());
@@ -267,6 +266,10 @@ void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 	{
 		// no stream open yet, open a new one
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Critical Fix: Sanitize source callsign to strip suffixes (e.g. "KF8S D" -> "KF8S")
+        my.SetCallsign(my.GetBase(), false);
+
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 
@@ -276,16 +279,6 @@ void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		{
 			// get client callsign
 			rpt1 = client->GetCallsign();
-
-			// module selection by DGID
-			if (m_EnableDGID && dgid >= 10 && dgid <= 35) {
-				char newModule = 'A' + (dgid - 10);
-				if (client->GetReflectorModule() != newModule) {
-					std::cout << "YSF: DGID module switch for " << client->GetCallsign() << " from " << client->GetReflectorModule() << " to " << newModule << std::endl;
-					client->SetReflectorModule(newModule);
-				}
-			}
-
 			// get module it's linked to
 			auto m = client->GetReflectorModule();
 			Header->SetRpt2Module(m);
@@ -304,7 +297,7 @@ void CYsfProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, 
 		// update last heard
 		if ( g_Reflector.IsValidModule(rpt2.GetCSModule()) )
 		{
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::ysf);
 			g_Reflector.ReleaseUsers();
 		}
 	}
@@ -489,7 +482,7 @@ bool CYsfProtocol::IsValidDvHeaderPacket(const CIp &Ip, const CYSFFICH &Fich, co
 			sz[YSF_CALLSIGN_LENGTH] = 0;
 			CCallsign rpt1 = CCallsign((const char *)sz);
 			rpt1.SetCSModule(YSF_MODULE_ID);
-			CCallsign rpt2 = m_ReflectorCallsign;
+			CCallsign rpt2 = g_Reflector.GetCallsign();
 			// as YSF protocol does not provide a module-tranlatable
 			// destid, set module to none and rely on OnDvHeaderPacketIn()
 			// to later fill it with proper value
@@ -542,13 +535,13 @@ bool CYsfProtocol::IsValidDvFramePacket(const CIp &Ip, const CYSFFICH &Fich, con
 			sz[YSF_CALLSIGN_LENGTH] = 0;
 			CCallsign rpt1 = CCallsign((const char *)sz);
 			rpt1.SetCSModule(YSF_MODULE_ID);
-			CCallsign rpt2 = m_ReflectorCallsign;
+			CCallsign rpt2 = g_Reflector.GetCallsign();
 			rpt2.SetCSModule(' ');
 			header = std::unique_ptr<CDvHeaderPacket>(new CDvHeaderPacket(csMY, CCallsign("CQCQCQ"), rpt1, rpt2, uiStreamId, Fich.getFN()));
 
 			if ( g_GateKeeper.MayTransmit(header->GetMyCallsign(), Ip, EProtocol::ysf, header->GetRpt2Module())  )
 			{
-				OnDvHeaderPacketIn(header, Ip, Fich.getSQ());
+				OnDvHeaderPacketIn(header, Ip);
 			}
 		}
 

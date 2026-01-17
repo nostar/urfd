@@ -322,6 +322,10 @@ void CDextraProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Heade
 	{
 		// no stream open yet, open a new one
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Critical Fix: Sanitize source callsign to strip suffixes (e.g. "KF8S D" -> "KF8S")
+        my.SetCallsign(my.GetBase(), false);
+
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 
@@ -351,7 +355,7 @@ void CDextraProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Heade
 		g_Reflector.ReleaseClients();
 
 		// update last heard
-		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+		g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2, rpt2, EProtocol::dextra);
 		g_Reflector.ReleaseUsers();
 	}
 }

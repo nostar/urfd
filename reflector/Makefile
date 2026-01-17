@@ -27,12 +27,12 @@ DBUTIL = dbutil
 include urfd.mk
 
 ifeq ($(debug), true)
-CFLAGS = -ggdb3 -DDEBUG -W -Werror -std=c++17 -MMD -MD
+CFLAGS = -ggdb3 -DDEBUG -W -Werror -std=c++17 -MMD
 else
-CFLAGS = -W -Werror -std=c++17 -MMD -MD
+CFLAGS = -W -Werror -std=c++17 -MMD
 endif
 
-LDFLAGS=-pthread -lcurl
+LDFLAGS=-pthread -lcurl -lnng -lopus -logg
 
 ifeq ($(DHT), true)
 LDFLAGS += -lopendht
@@ -40,7 +40,7 @@ else
 CFLAGS += -DNO_DHT
 endif
 
-SRCS = $(wildcard *.cpp)
+SRCS = $(filter-out test_audio.cpp test_dmr.cpp, $(wildcard *.cpp))
 OBJS = $(SRCS:.cpp=.o)
 DEPS = $(SRCS:.cpp=.d)
 DBUTILOBJS = Configure.o CurlGet.o Lookup.o LookupDmr.o LookupNxdn.o LookupYsf.o YSFNode.o Callsign.o
@@ -56,11 +56,14 @@ $(INICHECK) : Configure.cpp CurlGet.o
 $(DBUTIL) : Main.cpp $(DBUTILOBJS)
 	$(CXX) -DUTILITY $(CFLAGS) $< $(DBUTILOBJS) -o $@ -pthread -lcurl
 
+test_dmr: test_dmr.cpp DMRScanner.o
+	$(CXX) $(CFLAGS) $^ -o $@ -pthread
+
 %.o : %.cpp
 	$(CXX) $(CFLAGS) -c $< -o $@
 
 clean :
-	$(RM) *.o *.d $(EXE) $(INICHECK) $(DBUTIL)
+	$(RM) *.o *.d $(EXE) $(INICHECK) $(DBUTIL) test_dmr
 
 -include $(DEPS)
 

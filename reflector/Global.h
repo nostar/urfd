@@ -23,6 +23,7 @@
 #include "LookupYsf.h"
 #include "TCSocket.h"
 #include "JsonKeys.h"
+#include "NNGPublisher.h"
 
 extern CReflector  g_Reflector;
 extern CGateKeeper g_GateKeeper;
@@ -33,3 +34,4 @@ extern CLookupNxdn g_LNid;
 extern CLookupYsf  g_LYtr;
 extern SJsonKeys   g_Keys;
 extern CTCServer   g_TCServer;
+extern CNNGPublisher g_NNGPublisher;

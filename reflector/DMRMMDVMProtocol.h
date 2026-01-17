@@ -70,17 +70,17 @@ protected:
 	void HandleKeepalives(void);
 
 	// stream helpers
-	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &, uint8_t, uint8_t);
+	void OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &, const CIp &, uint8_t, uint8_t, uint8_t);
 
 	// packet decoding helpers
 	bool IsValidConnectPacket(const CBuffer &, CCallsign *, const CIp &);
 	bool IsValidAuthenticationPacket(const CBuffer &, CCallsign *, const CIp &);
 	bool IsValidDisconnectPacket(const CBuffer &, CCallsign *);
 	bool IsValidConfigPacket(const CBuffer &, CCallsign *, const CIp &);
-	bool IsValidOptionPacket(const CBuffer &, CCallsign *);
+	bool IsValidOptionPacket(const CBuffer &, CCallsign *, const CIp &);
 	bool IsValidKeepAlivePacket(const CBuffer &, CCallsign *);
 	bool IsValidRssiPacket(const CBuffer &, CCallsign *, int *);
-	bool IsValidDvHeaderPacket(const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, uint8_t *, uint8_t *);
+	bool IsValidDvHeaderPacket(const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, uint8_t *, uint8_t *, uint8_t *);
 	bool IsValidDvFramePacket(const CIp &, const CBuffer &, std::unique_ptr<CDvHeaderPacket> &, std::array<std::unique_ptr<CDvFramePacket>, 3> &);
 	bool IsValidDvLastFramePacket(const CBuffer &, std::unique_ptr<CDvFramePacket> &);
 
@@ -90,17 +90,17 @@ protected:
 	void EncodeConnectAckPacket(CBuffer *, const CCallsign &, uint32_t);
 	void EncodeNackPacket(CBuffer *, const CCallsign &);
 	void EncodeClosePacket(CBuffer *, std::shared_ptr<CClient>);
-	bool EncodeMMDVMHeaderPacket(const CDvHeaderPacket &, uint8_t, CBuffer *) const;
-	void EncodeMMDVMPacket(const CDvHeaderPacket &, const CDvFramePacket &, const CDvFramePacket &, const CDvFramePacket &, uint8_t, CBuffer *) const;
-	void EncodeLastMMDVMPacket(const CDvHeaderPacket &, uint8_t, CBuffer *) const;
+	bool EncodeMMDVMHeaderPacket(const CDvHeaderPacket &, uint8_t, uint32_t, uint8_t, CBuffer *) const;
+	void EncodeMMDVMPacket(const CDvHeaderPacket &, const CDvFramePacket &, const CDvFramePacket &, const CDvFramePacket &, uint8_t, uint32_t, uint8_t, CBuffer *) const;
+	void EncodeLastMMDVMPacket(const CDvHeaderPacket &, uint8_t, uint32_t, uint8_t, CBuffer *) const;
 
 	// dmr DstId to Module helper
 	char DmrDstIdToModule(uint32_t) const;
 	uint32_t ModuleToDmrDestId(char) const;
 
 	// Buffer & LC helpers
-	void AppendVoiceLCToBuffer(CBuffer *, uint32_t) const;
-	void AppendTerminatorLCToBuffer(CBuffer *, uint32_t) const;
+	void AppendVoiceLCToBuffer(CBuffer *, uint32_t, uint32_t) const;
+	void AppendTerminatorLCToBuffer(CBuffer *, uint32_t, uint32_t) const;
 	void ReplaceEMBInBuffer(CBuffer *, uint8_t) const;
 	void AppendDmrIdToBuffer(CBuffer *, uint32_t) const;
 	void AppendDmrRptrIdToBuffer(CBuffer *, uint32_t) const;
@@ -118,6 +118,9 @@ protected:
 
 	// for authentication
 	uint32_t              m_uiAuthSeed;
+
+    // for debug logging
+    int                   m_debugFrameCount;
 
 	// config data
 	unsigned m_DefaultId;

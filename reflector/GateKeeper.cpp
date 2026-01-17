@@ -278,7 +278,7 @@ const std::string CGateKeeper::ProtocolName(const EProtocol p) const
 		case EProtocol::dextra:
 			return "DExtra";
 		case EProtocol::dmrmmdvm:
-			return "MMDVM DMR";
+			return "DMR";
 		case EProtocol::dmrplus:
 			return "DMR+";
 		case EProtocol::urf:
@@ -295,6 +295,8 @@ const std::string CGateKeeper::ProtocolName(const EProtocol p) const
 			return "Brandmeister";
 		case EProtocol::g3:
 			return "Icom G3";
+		case EProtocol::m17:
+			return "M17";
 		default:
 			return "NONE";
 	}

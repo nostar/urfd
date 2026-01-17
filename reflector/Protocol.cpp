@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <iostream>
+#include <map>
+#include <ctime>
+#include <iomanip>
 #include "Defines.h"
 #include "Global.h"
 #include "Protocol.h"
@@ -142,7 +146,17 @@ void CProtocol::OnDvFramePacketIn(std::unique_ptr<CDvFramePacket> &Frame, const 
 	else
 	{
 		std::cout << std::showbase << std::hex;
-		std::cout << "Orphaned Frame with ID " << ntohs(Frame->GetStreamId()) << std::noshowbase << std::dec << " on " << *Ip << std::endl;
+		// Rate limit warnings: only log once every 60 seconds per stream ID
+		static std::map<uint16_t, std::time_t> last_warning;
+		std::time_t now = std::time(nullptr);
+		uint16_t sid = ntohs(Frame->GetStreamId());
+
+		if (last_warning.find(sid) == last_warning.end() || (now - last_warning[sid]) > 60) {
+			std::cout << "Orphaned Frame with ID " << std::hex << std::showbase << sid 
+                      << std::noshowbase << std::dec << " on " << *Ip 
+                      << " (Suppressed for 60s)" << std::endl;
+			last_warning[sid] = now;
+		}
 		Frame.reset();
 	}
 //#endif
@@ -210,11 +224,29 @@ bool CProtocol::IsSpace(char c) const
 
 char CProtocol::DmrDstIdToModule(uint32_t tg) const
 {
-	return ((char)((tg % 26)-1) + 'A');
+    // Check for custom mapping first (Mini DMR Mode)
+    // Iterate A-Z to find if this TG is mapped
+    for (char m = 'A'; m <= 'Z'; m++) {
+        std::string key = g_Keys.dmr.map_prefix + std::string(1, m);
+        if (g_Configure.Contains(key)) {
+            if (g_Configure.GetUnsigned(key) == tg) {
+                return m;
+            }
+        }
+    }
+
+	return ((char)((tg % 26U)-1U) + 'A');
 }
 
 uint32_t CProtocol::ModuleToDmrDestId(char m) const
 {
+	// Check for custom mapping first (Mini DMR Mode)
+    std::string key = g_Keys.dmr.map_prefix + std::string(1, m);
+    if (g_Configure.Contains(key)) {
+        return g_Configure.GetUnsigned(key);
+    }
+    
+    // Fallback to legacy XLX logic (A=1, B=2...)
 	return (uint32_t)(m - 'A')+1;
 }
 
@@ -335,21 +367,7 @@ void CProtocol::Send(const char *buf, const CIp &Ip, uint16_t port) const
 	}
 }
 
-void CProtocol::Send(const SM17Frame &frame, const CIp &Ip) const
-{
-	switch (Ip.GetFamily())
-	{
-	case AF_INET:
-		m_Socket4.Send(frame.magic, sizeof(SM17Frame), Ip);
-		break;
-	case AF_INET6:
-		m_Socket6.Send(frame.magic, sizeof(SM17Frame), Ip);
-		break;
-	default:
-		std::cerr << "WrongFamily: " << Ip.GetFamily() << std::endl;
-		break;
-	}
-}
+
 
 #ifdef DEBUG
 void CProtocol::Dump(const char *title, const uint8_t *data, int length)

@@ -19,6 +19,10 @@
 
 #include <string.h>
 
+#include <iostream>
+#include <map>
+#include <ctime>
+#include <iomanip>
 #include "Global.h"
 #include "DMRMMDVMClient.h"
 #include "DMRMMDVMProtocol.h"
@@ -61,6 +65,10 @@ bool CDmrmmdvmProtocol::Initialize(const char *type, const EProtocol ptype, cons
 	::srand((unsigned) time(&t));
 	m_uiAuthSeed = (uint32_t)rand();
 
+    // Debug: Start disabled
+    m_debugFrameCount = 6; 
+    std::cout << "[DEBUG] DMR Burst Logging Enabled (Header + 6 Frames)" << std::endl;
+
 	// done
 	return true;
 }
@@ -78,6 +86,7 @@ void CDmrmmdvmProtocol::Task(void)
 	int       iRssi;
 	uint8_t     Cmd;
 	uint8_t     CallType;
+    uint8_t     uiSlot;
 	std::unique_ptr<CDvHeaderPacket>  Header;
 	std::unique_ptr<CDvFramePacket>   LastFrame;
 	std::array<std::unique_ptr<CDvFramePacket>, 3> Frames;
@@ -94,21 +103,67 @@ void CDmrmmdvmProtocol::Task(void)
 #endif
 	{
 		//Buffer.DebugDump(g_Reflector.m_DebugFile);
+
+        // RAW DEBUG LOGGING (Pre-Validation)
+        // Detect Header to reset counter
+        uint8_t dmrd_tag[] = { 'D','M','R','D' };
+        if (Buffer.size() == 55 && Buffer.Compare(dmrd_tag, 4) == 0) {
+             uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
+             uint8_t uiFrameType = (Buffer.data()[15] & 0x30) >> 4;
+             // Check if it's a Header (DataSync + Header Slot Type)
+             // Need definitions or hardcoded values matching IsValidDvHeaderPacket
+             // DMRMMDVM_FRAMETYPE_DATASYNC=2, MMDVM_SLOTTYPE_HEADER=1
+             if (uiFrameType == 2 && uiSlotType == 1) {
+                 m_debugFrameCount = 0;
+                 std::cout << "[DEBUG-RAW] Header Detected -> Reset Log Counter" << std::endl;
+             }
+        }
+
+        if (m_debugFrameCount < 6) {
+             std::cout << "[DEBUG-RAW] Pkt " << m_debugFrameCount << " Size=" << Buffer.size() << " Data: ";
+             for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+             std::cout << std::endl;
+             
+             // If this wasn't a header (counter 0), increment? 
+             // Or let IsValidDvFramePacket increment?
+             // If validation fails, we won't increment, so we might log infinite "bad" packets.
+             // Let's increment here for "Raw" logging purposes if not 0?
+             // Actually, keep it simple. If valid header, count=0. Then we see it.
+             // If valid frame, increment.
+             // If invalid frame, we verify it arrived.
+             // BUT if we don't increment on invalid frames, we'll spam logs if client sends garbage.
+             // Force increment counter if > 0?
+             if (m_debugFrameCount > 0) m_debugFrameCount++; 
+        }
+
 		// crack the packet
 		if ( IsValidDvFramePacket(Ip, Buffer, Header, Frames) )
 		{
+            if (m_debugFrameCount < 6) {
+                m_debugFrameCount++;
+                std::cout << "[DEBUG] DMR Frame " << m_debugFrameCount << " Size=" << Buffer.size() << " Data: ";
+                for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+                std::cout << std::endl;
+            }
+
 			for ( int i = 0; i < 3; i++ )
 			{
 				OnDvFramePacketIn(Frames.at(i), &Ip);
 			}
 		}
-		else if ( IsValidDvHeaderPacket(Buffer, Header, &Cmd, &CallType) )
+		else if ( IsValidDvHeaderPacket(Buffer, Header, &Cmd, &CallType, &uiSlot) )
 		{
+            // Reset Logging on Header
+            m_debugFrameCount = 0;
+            std::cout << "[DEBUG] DMR Header IN (Reset Log) Size=" << Buffer.size() << " Data: ";
+            for (size_t i = 0; i < Buffer.size(); i++) printf("%02X", Buffer.data()[i]);
+            std::cout << std::endl;
+
 			// callsign muted?
 			if ( g_GateKeeper.MayTransmit(Header->GetMyCallsign(), Ip, EProtocol::dmrmmdvm) )
 			{
 				// handle it
-				OnDvHeaderPacketIn(Header, Ip, Cmd, CallType);
+				OnDvHeaderPacketIn(Header, Ip, Cmd, CallType, uiSlot);
 			}
 		}
 		else if ( IsValidDvLastFramePacket(Buffer, LastFrame) )
@@ -154,7 +209,16 @@ void CDmrmmdvmProtocol::Task(void)
 					std::cout << "DMRmmdvm login from " << Callsign << " at " << Ip << std::endl;
 
 					// create the client and append
-					clients->AddClient(std::make_shared<CDmrmmdvmClient>(Callsign, Ip));
+					std::shared_ptr<CDmrmmdvmClient> newClient = std::make_shared<CDmrmmdvmClient>(Callsign, Ip);
+					
+					// Configure Scanner
+					newClient->m_Scanner.Configure(
+						g_Configure.GetBoolean(g_Keys.dmr.single),
+						g_Configure.GetUnsigned(g_Keys.dmr.timeout),
+						g_Configure.GetUnsigned(g_Keys.dmr.hold)
+					);
+					
+					clients->AddClient(newClient);
 				}
 				else
 				{
@@ -217,7 +281,7 @@ void CDmrmmdvmProtocol::Task(void)
 
 			// ignore...
 		}
-		else if ( IsValidOptionPacket(Buffer, &Callsign) )
+		else if ( IsValidOptionPacket(Buffer, &Callsign, Ip) )
 		{
 			std::cout << "DMRmmdvm options packet from " << Callsign << " at " << Ip << std::endl;
 
@@ -254,7 +318,9 @@ void CDmrmmdvmProtocol::Task(void)
 ////////////////////////////////////////////////////////////////////////////////////////
 // streams helpers
 
-void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t cmd, uint8_t CallType)
+// stream helpers
+
+void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Header, const CIp &Ip, uint8_t cmd, uint8_t CallType, uint8_t uiSlot)
 {
 	bool lastheard = false;
 
@@ -269,6 +335,10 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 	else
 	{
 		CCallsign my(Header->GetMyCallsign());
+        
+        // Sanitize source callsign (Strip suffixes)
+        my.SetCallsign(my.GetBase(), false); 
+        
 		CCallsign rpt1(Header->GetRpt1Callsign());
 		CCallsign rpt2(Header->GetRpt2Callsign());
 		// no stream open yet, open a new one
@@ -276,6 +346,107 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 		std::shared_ptr<CClient>client = g_Reflector.GetClients()->FindClient(Ip, EProtocol::dmrmmdvm);
 		if ( client )
 		{
+			// Mini DMR / Flexible Mode Logic
+			if (!g_Configure.GetBoolean(g_Keys.dmr.xlx))
+			{
+				std::shared_ptr<CDmrmmdvmClient> dmrClient = std::dynamic_pointer_cast<CDmrmmdvmClient>(client);
+				if (dmrClient)
+				{
+					// Map Destination ID (TG) to Module (if applicable, but we mostly care about TG)
+					// Actually, DmrDstIdToModule handles dynamic mapping now.
+					// But we want to use the RAW TG for subscription?
+					// DmrDstIdToModule uses the map to find 'A' from TG.
+					// If we are in XlxMode=false, DmrDstIdToModule uses the map.
+					// rpt2 checks GetCSModule().
+					// We need to know the Talkgroup.
+					// Helper: module 'A' -> TG X.
+					// Header->GetRpt2Callsign() call has Module set by DmrDstIdToModule.
+					
+					// Mini DMR Fix: Derive TG from Packet Header (Destination), NOT from RPT2 Module Suffix.
+					// RPT2 suffix (e.g. 'A') is good for DroidStar/XLX, but DMRGateway raw rewrites 
+					// might not set RPT2 correctly (e.g. just "N8ZA" or "DMRGW").
+					uint32_t tg = 0;
+					try {
+					    std::string destStr = Header->GetUrCallsign().GetCS();
+					    // Remove spaces
+					    destStr.erase(std::remove(destStr.begin(), destStr.end(), ' '), destStr.end());
+					    if (!destStr.empty() && std::all_of(destStr.begin(), destStr.end(), ::isdigit)) {
+					        tg = std::stoul(destStr);
+					    }
+					} catch (...) {
+					    tg = 0;
+					}
+
+                    // Fallback to Module mapping if TG is 0 (e.g. "CQCQCQ" or parse error)
+                    char mod = ' ';
+                    if (tg > 0) {
+                        mod = DmrDstIdToModule(tg);
+                    } else {
+                        mod = rpt2.GetCSModule();
+                        tg = ModuleToDmrDestId(mod);
+                    }
+					
+					// Mini DMR: Explicit Disconnect (TG 4000 or specific unlink cmd)
+					if (tg == 4000 || cmd == CMD_UNLINK)
+					{
+						std::cout << "DMRmmdvm client " << client->GetCallsign() << " Mini DMR Disconnect (TG 4000)" << std::endl;
+						dmrClient->m_Scanner.ClearSubscriptions();
+						client->SetReflectorModule(' '); // Clear module attachment
+						g_Reflector.ReleaseClients();
+						return; 
+					}
+					
+					// Anti-Kerchunk / Hold Check
+					// If this is a new transmission (Header), we check access.
+					if (!dmrClient->m_Scanner.CheckAccess(tg)) {
+						// Blocked by Scanner Hold or not subscribed?
+						// Wait, strict logic: "Clients subscribe... traffic is routed".
+						// If I PTT on a TG, should I auto-subscribe?
+						// Plan says: "Subscribe: Thread-safe update... First PTT Logic".
+						// So we SHOULD subscribe.
+						// But if we subscribe, CheckAccess(tg) will return true (unless held by OTHER).
+						// So we add subscription first.
+						
+						// Add Subscription (Dynamic)
+						// Add Subscription (Dynamic)
+						unsigned int timeout = g_Configure.GetUnsigned(g_Keys.dmr.timeout);
+						
+						// FIX: Use actual slot from packet
+						int slot = uiSlot;
+						if (slot == 0) slot = 2; // Default to TS2 only if slot not resolved (safety)
+
+						// Auto-subscribe if not subscribed? 
+						// If user is transmitting on 'slot', they want to subscribe on 'slot'.
+						if (dmrClient->m_Scanner.GetSubscriptionSlot(tg) == 0) {
+                             // PTT -> Dynamic Subscription (isStatic=false)
+ 							 dmrClient->m_Scanner.AddSubscription(tg, slot, timeout, false);
+						}
+						
+						// Check Access on the specific slot
+						if (!dmrClient->m_Scanner.CheckAccess(tg, slot)) {
+							// Blocked (Held by another TG on this slot)
+							g_Reflector.ReleaseClients();
+							return;
+						}
+
+						// FIX: Ensure OpenStream sees the client attached to this module
+						client->SetReflectorModule(rpt2.GetCSModule());
+					} else {
+                        // Access Granted (Already Subscribed) - Renew Timer if Dynamic
+                        unsigned int timeout = g_Configure.GetUnsigned(g_Keys.dmr.timeout);
+                        int slot = dmrClient->m_Scanner.GetSubscriptionSlot(tg);
+                        if (slot != 0) {
+                             dmrClient->m_Scanner.RenewSubscription(tg, slot, timeout);
+                        }
+                    }
+                    
+                    // Always ensure module is set if we are processing this packet (Access Granted)
+                    // DEBUG: Trace Module Assignment
+                    // std::cout << "DEBUG: " << client->GetCallsign().GetCS() << " assigned to module " << rpt2.GetCSModule() << std::endl;
+                    client->SetReflectorModule(rpt2.GetCSModule());
+				}
+			}
+
 			// process cmd if any
 			if ( !client->HasReflectorModule() )
 			{
@@ -284,9 +455,14 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 				{
 					if ( g_Reflector.IsValidModule(rpt2.GetCSModule()) )
 					{
-						std::cout << "DMRmmdvm client " << client->GetCallsign() << " linking on module " << rpt2.GetCSModule() << std::endl;
-						// link
-						client->SetReflectorModule(rpt2.GetCSModule());
+						// In Mini DMR, we don't necessarily "Link" the client object,
+						// but existing logic uses SetReflectorModule for routing.
+						// WE should ONLY do this in XLX mode.
+						if (g_Configure.GetBoolean(g_Keys.dmr.xlx)) {
+							std::cout << "DMRmmdvm client " << client->GetCallsign() << " linking on module " << rpt2.GetCSModule() << std::endl;
+							// link
+							client->SetReflectorModule(rpt2.GetCSModule());
+						}
 					}
 					else
 					{
@@ -335,7 +511,18 @@ void CDmrmmdvmProtocol::OnDvHeaderPacketIn(std::unique_ptr<CDvHeaderPacket> &Hea
 		// update last heard
 		if ( lastheard )
 		{
-			g_Reflector.GetUsers()->Hearing(my, rpt1, rpt2);
+			// Fix Dashboard Target Display
+            // Construct target with explicit stringID to show "7002" instead of "CQCQCQ"
+            // CRITICAL FIX: Header is unique_ptr and was MOVED in OpenStream above if stream opened.
+            // We cannot access Header here if stream != nullptr.
+            // Reconstruct a clean target object.
+            CCallsign target("CQCQCQ"); // Default safe initialization
+            
+            // uiDstId is not in scope, recover it from the module (which relies on urfd.ini mapping)
+            uint32_t tg = ModuleToDmrDestId(rpt2.GetCSModule());
+            target.SetCallsign(std::to_string(tg));
+            
+			g_Reflector.GetUsers()->Hearing(my, target, rpt1, rpt2, EProtocol::dmrmmdvm);
 			g_Reflector.ReleaseUsers();
 		}
 	}
@@ -354,8 +541,9 @@ void CDmrmmdvmProtocol::HandleQueue(void)
 		// get our sender's id
 		const auto mod = packet->GetPacketModule();
 
-		// encode
-		CBuffer buffer;
+		// encode buffers for both slots
+		CBuffer bufferTS1;
+		CBuffer bufferTS2;
 
 		// check if it's header
 		if ( packet->IsDvHeader() )
@@ -365,20 +553,32 @@ void CDmrmmdvmProtocol::HandleQueue(void)
 			m_StreamsCache[mod].m_dvHeader = CDvHeaderPacket((const CDvHeaderPacket &)*packet.get());
 			m_StreamsCache[mod].m_uiSeqId = 0;
 
+            // Calculate Destination ID based on Module (XLX or Mini DMR logic)
+            uint32_t tg = ModuleToDmrDestId(packet->GetPacketModule());
+
 			// encode it
-			EncodeMMDVMHeaderPacket((CDvHeaderPacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, &buffer);
+			EncodeMMDVMHeaderPacket((CDvHeaderPacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, tg, 1, &bufferTS1);
+			EncodeMMDVMHeaderPacket((CDvHeaderPacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, tg, 2, &bufferTS2);
 			m_StreamsCache[mod].m_uiSeqId = 1;
+
+            // Store TG in cache for subsequent frames? Or recalculate?
+            // ModuleToDmrDestId is fast enough.
 		}
 		// check if it's a last frame
 		else if ( packet->IsLastPacket() )
 		{
+            uint32_t tg = ModuleToDmrDestId(packet->GetPacketModule());
+
 			// encode it
-			EncodeLastMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_uiSeqId, &buffer);
+			EncodeLastMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_uiSeqId, tg, 1, &bufferTS1);
+			EncodeLastMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_uiSeqId, tg, 2, &bufferTS2);
 			m_StreamsCache[mod].m_uiSeqId = (m_StreamsCache[mod].m_uiSeqId + 1) & 0xFF;
 		}
 		// otherwise, just a regular DV frame
 		else
 		{
+            uint32_t tg = ModuleToDmrDestId(packet->GetPacketModule());
+
 			// update local stream cache or send triplet when needed
 			switch ( packet->GetDmrPacketSubid() )
 			{
@@ -389,7 +589,8 @@ void CDmrmmdvmProtocol::HandleQueue(void)
 				m_StreamsCache[mod].m_dvFrame1 = CDvFramePacket((const CDvFramePacket &)*packet.get());
 				break;
 			case 3:
-				EncodeMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_dvFrame0, m_StreamsCache[mod].m_dvFrame1, (const CDvFramePacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, &buffer);
+				EncodeMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_dvFrame0, m_StreamsCache[mod].m_dvFrame1, (const CDvFramePacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, tg, 1, &bufferTS1);
+				EncodeMMDVMPacket(m_StreamsCache[mod].m_dvHeader, m_StreamsCache[mod].m_dvFrame0, m_StreamsCache[mod].m_dvFrame1, (const CDvFramePacket &)*packet.get(), m_StreamsCache[mod].m_uiSeqId, tg, 2, &bufferTS2);
 				m_StreamsCache[mod].m_uiSeqId = (m_StreamsCache[mod].m_uiSeqId + 1) & 0xFF;
 				break;
 			default:
@@ -398,20 +599,52 @@ void CDmrmmdvmProtocol::HandleQueue(void)
 		}
 
 		// send it
-		if ( buffer.size() > 0 )
+		if ( bufferTS1.size() > 0 || bufferTS2.size() > 0 )
 		{
 			// and push it to all our clients linked to the module and who are not streaming in
 			CClients *clients = g_Reflector.GetClients();
 			auto it = clients->begin();
 			std::shared_ptr<CClient>client = nullptr;
+            
+            // Calculate TG again for convenience or use from above scope?
+            // The logic above is inside if/else blocks.
+            // Recalculate is safest and clean.
+            uint32_t tg = ModuleToDmrDestId(packet->GetPacketModule());
+
 			while ( (client = clients->FindNextClient(EProtocol::dmrmmdvm, it)) != nullptr )
 			{
 				// is this client busy ?
-				if ( !client->IsAMaster() && (client->GetReflectorModule() == packet->GetPacketModule()) )
+				if ( !client->IsAMaster() )
 				{
-					// no, send the packet
-					Send(buffer, client->GetIp());
+					if (g_Configure.GetBoolean(g_Keys.dmr.xlx))
+					{
+						// Legacy XLX Mode: Link Check
+						// Default to TS2 buffer for XLX
+						// Or should we support both slots in XLX? Usually Reflector runs on TS2.
+						if (client->GetReflectorModule() == packet->GetPacketModule())
+							Send(bufferTS2, client->GetIp()); 
+					}
+					else
+					{
+						// Mini DMR Mode: Scanner Check
+						std::shared_ptr<CDmrmmdvmClient> dmrClient = std::dynamic_pointer_cast<CDmrmmdvmClient>(client);
+						if (dmrClient)
+						{
+							// uint32_t tg = ModuleToDmrDestId(packet->GetPacketModule()); // Already calculated
+							
+							// Check Access for each slot independently
+                            bool ts1 = bufferTS1.size() > 0 && dmrClient->m_Scanner.CheckAccess(tg, 1);
+                            bool ts2 = bufferTS2.size() > 0 && dmrClient->m_Scanner.CheckAccess(tg, 2);
 
+							if (ts1) {
+                                Send(bufferTS1, client->GetIp());
+                            }
+								
+							if (ts2) {
+                                Send(bufferTS2, client->GetIp());
+                            }
+						}
+					}
 				}
 			}
 			g_Reflector.ReleaseClients();
@@ -543,12 +776,41 @@ bool CDmrmmdvmProtocol::IsValidConfigPacket(const CBuffer &Buffer, CCallsign *ca
 		{
 			std::cout << "Invalid callsign in DMRmmdvm RPTC packet from IP: " << Ip << " CS:" << *callsign << " DMRID:" << callsign->GetDmrid() << std::endl;
 		}
+		else
+		{
+			// Update Options from Description
+			// Description starts at offset 67, length 40 (approx). Buffer size 302.
+			if (Buffer.size() >= 107) {
+				std::string desc((const char*)(Buffer.data() + 67), 40);
+				// Trim nulls or grab until null
+				size_t nullpos = desc.find('\0');
+				if (nullpos != std::string::npos) desc.resize(nullpos);
+				
+				// Find client
+				CClients *clients = g_Reflector.GetClients();
+				std::shared_ptr<CClient> client = clients->FindClient(*callsign, Ip, EProtocol::dmrmmdvm);
+				if (client) {
+					std::shared_ptr<CDmrmmdvmClient> dmrClient = std::dynamic_pointer_cast<CDmrmmdvmClient>(client);
+					if (dmrClient) {
+						std::cout << "DMRmmdvm Options Update for " << client->GetCallsign() << ": " << desc << std::endl;
+					dmrClient->m_Scanner.UpdateSubscriptions(desc);
+					// FIX: Update Visual Module based on First Subscription
+					uint32_t firstTG = dmrClient->m_Scanner.GetFirstSubscription();
+					if (firstTG > 0) {
+						char mod = DmrDstIdToModule(firstTG);
+						if (mod != ' ') dmrClient->SetReflectorModule(mod);
+					}
+				}
+			}
+			g_Reflector.ReleaseClients();
+			}
+		}
 
 	}
 	return valid;
 }
 
-bool CDmrmmdvmProtocol::IsValidOptionPacket(const CBuffer &Buffer, CCallsign *callsign)
+bool CDmrmmdvmProtocol::IsValidOptionPacket(const CBuffer &Buffer, CCallsign *callsign, const CIp &Ip)
 {
 	uint8_t tag[] = { 'R','P','T','O' };
 
@@ -559,6 +821,32 @@ bool CDmrmmdvmProtocol::IsValidOptionPacket(const CBuffer &Buffer, CCallsign *ca
 		callsign->SetDmrid(uiRptrId, true);
 		callsign->SetCSModule(MMDVM_MODULE_ID);
 		valid = callsign->IsValid();
+
+		if (valid && Buffer.size() > 8) {
+			// Extract Options String
+			std::string options((const char*)(Buffer.data() + 8), Buffer.size() - 8);
+			// Trim potential nulls
+			size_t nullpos = options.find('\0');
+			if (nullpos != std::string::npos) options.resize(nullpos);
+
+			// Find client and update
+			CClients *clients = g_Reflector.GetClients();
+			std::shared_ptr<CClient> client = clients->FindClient(*callsign, Ip, EProtocol::dmrmmdvm);
+			if (client) {
+				std::shared_ptr<CDmrmmdvmClient> dmrClient = std::dynamic_pointer_cast<CDmrmmdvmClient>(client);
+				if (dmrClient) {
+					std::cout << "DMRmmdvm RPTO Options for " << client->GetCallsign() << ": " << options << std::endl;
+					dmrClient->m_Scanner.UpdateSubscriptions(options);
+					// FIX: Update Visual Module based on First Subscription
+					uint32_t firstTG = dmrClient->m_Scanner.GetFirstSubscription();
+					if (firstTG > 0) {
+						char mod = DmrDstIdToModule(firstTG);
+						if (mod != ' ') dmrClient->SetReflectorModule(mod);
+					}
+				}
+			}
+			g_Reflector.ReleaseClients();
+		}
 	}
 	return valid;
 }
@@ -578,11 +866,12 @@ bool CDmrmmdvmProtocol::IsValidRssiPacket(const CBuffer &Buffer, CCallsign *call
 	return valid;
 }
 
-bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique_ptr<CDvHeaderPacket> &header, uint8_t *cmd, uint8_t *CallType)
+bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique_ptr<CDvHeaderPacket> &header, uint8_t *cmd, uint8_t *CallType, uint8_t *Slot)
 {
 	uint8_t tag[] = { 'D','M','R','D' };
 
 	*cmd = CMD_NONE;
+    if (Slot) *Slot = 0; // Init safe value
 
 	if ( (Buffer.size() == 55) && (Buffer.Compare(tag, sizeof(tag)) == 0) )
 	{
@@ -593,7 +882,7 @@ bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique
 		uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
 		//std::cout << (int)uiSlot << std::endl;
 		if ( (uiFrameType == DMRMMDVM_FRAMETYPE_DATASYNC) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
+				//(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
 				(uiSlotType == MMDVM_SLOTTYPE_HEADER) )
 		{
 			// extract sync
@@ -620,6 +909,9 @@ bool CDmrmmdvmProtocol::IsValidDvHeaderPacket(const CBuffer &Buffer, std::unique
 
 				// call type
 				*CallType = uiCallType;
+                
+                // Return Slot
+                if (Slot) *Slot = uiSlot;
 
 				// link/unlink command ?
 				if ( uiDstId == 4000 )
@@ -663,7 +955,7 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 		uint8_t uiSlot = (Buffer.data()[15] & 0x80) ? DMR_SLOT2 : DMR_SLOT1;
 		uint8_t uiCallType = (Buffer.data()[15] & 0x40) ? DMR_PRIVATE_CALL : DMR_GROUP_CALL;
 		if ( ((uiFrameType == DMRMMDVM_FRAMETYPE_VOICE) || (uiFrameType == DMRMMDVM_FRAMETYPE_VOICESYNC)) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) && (uiCallType == DMR_GROUP_CALL) )
+				/*(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&*/ (uiCallType == DMR_GROUP_CALL) )
 		{
 			// crack DMR header
 			//uint8_t uiSeqId = Buffer.data()[4];
@@ -677,7 +969,16 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 			if ( !stream )
 			{
 				std::cout << std::showbase << std::hex;
-				std::cout << "Late entry DMR voice frame, creating DMR header for DMR stream ID " << ntohl(uiStreamId) << std::noshowbase << std::dec << " on " << Ip << std::endl;
+				static std::map<uint32_t, std::time_t> last_late_entry;
+				std::time_t now = std::time(nullptr);
+				uint32_t sid = ntohl(uiStreamId);
+
+				if (last_late_entry.find(sid) == last_late_entry.end() || (now - last_late_entry[sid]) > 60) {
+					std::cout << "Late entry DMR voice frame, creating DMR header for DMR stream ID " << std::hex << std::showbase << sid 
+							  << std::noshowbase << std::dec << " on " << Ip 
+							  << " (Suppressed for 60s)" << std::endl;
+					last_late_entry[sid] = now;
+				}
 				std::cout << std::noshowbase << std::dec;
 				uint8_t cmd;
 
@@ -708,7 +1009,7 @@ bool CDmrmmdvmProtocol::IsValidDvFramePacket(const CIp &Ip, const CBuffer &Buffe
 				if ( g_GateKeeper.MayTransmit(header->GetMyCallsign(), Ip, EProtocol::dmrmmdvm) )
 				{
 					// handle it
-					OnDvHeaderPacketIn(header, Ip, cmd, uiCallType);
+					OnDvHeaderPacketIn(header, Ip, cmd, uiCallType, uiSlot);
 				}
 			}
 
@@ -768,7 +1069,7 @@ bool CDmrmmdvmProtocol::IsValidDvLastFramePacket(const CBuffer &Buffer, std::uni
 		uint8_t uiSlotType = Buffer.data()[15] & 0x0F;
 		//std::cout << (int)uiSlot << std::endl;
 		if ( (uiFrameType == DMRMMDVM_FRAMETYPE_DATASYNC) &&
-				(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
+				//(uiSlot == DMRMMDVM_REFLECTOR_SLOT) &&
 				(uiSlotType == MMDVM_SLOTTYPE_TERMINATOR) )
 		{
 			// extract sync
@@ -850,8 +1151,11 @@ void CDmrmmdvmProtocol::EncodeClosePacket(CBuffer *Buffer, std::shared_ptr<CClie
 }
 
 
-bool CDmrmmdvmProtocol::EncodeMMDVMHeaderPacket(const CDvHeaderPacket &Packet, uint8_t seqid, CBuffer *Buffer) const
+bool CDmrmmdvmProtocol::EncodeMMDVMHeaderPacket(const CDvHeaderPacket &Packet, uint8_t seqid, uint32_t dstId, uint8_t slot, CBuffer *Buffer) const
 {
+    // Debug Encode
+    // std::cout << "DEBUG: EncodeHeader dstId=" << dstId << " Slot=" << (int)slot << std::endl;
+
 	uint8_t tag[] = { 'D','M','R','D' };
 
 	Buffer->Set(tag, sizeof(tag));
@@ -861,17 +1165,19 @@ bool CDmrmmdvmProtocol::EncodeMMDVMHeaderPacket(const CDvHeaderPacket &Packet, u
 	Buffer->Append((uint8_t)seqid);
 	// uiSrcId
 	uint32_t uiSrcId = Packet.GetMyCallsign().GetDmrid();
+    // Fallback to default ID if source has none (e.g. Analog bridge)
+    if (uiSrcId == 0) uiSrcId = m_DefaultId;
+
 	AppendDmrIdToBuffer(Buffer, uiSrcId);
-	// uiDstId = TG9
-	uint32_t uiDstId = 9; // ModuleToDmrDestId(Packet.GetRpt2Module());
-	AppendDmrIdToBuffer(Buffer, uiDstId);
+	// uiDstId
+	AppendDmrIdToBuffer(Buffer, dstId);
 	// uiRptrId
 	uint32_t uiRptrId = Packet.GetRpt1Callsign().GetDmrid();
 	AppendDmrRptrIdToBuffer(Buffer, uiRptrId);
 	// uiBitField
 	uint8_t uiBitField =
 		(DMRMMDVM_FRAMETYPE_DATASYNC << 4) |
-		((DMRMMDVM_REFLECTOR_SLOT == DMR_SLOT2) ? 0x80 : 0x00) |
+		((slot == 2) ? 0x80 : 0x00) |
 		MMDVM_SLOTTYPE_HEADER;
 	Buffer->Append((uint8_t)uiBitField);
 	// uiStreamId
@@ -879,7 +1185,7 @@ bool CDmrmmdvmProtocol::EncodeMMDVMHeaderPacket(const CDvHeaderPacket &Packet, u
 	Buffer->Append((uint32_t)uiStreamId);
 
 	// Payload
-	AppendVoiceLCToBuffer(Buffer, uiSrcId);
+	AppendVoiceLCToBuffer(Buffer, uiSrcId, dstId);
 
 	// BER
 	Buffer->Append((uint8_t)0);
@@ -891,7 +1197,7 @@ bool CDmrmmdvmProtocol::EncodeMMDVMHeaderPacket(const CDvHeaderPacket &Packet, u
 	return true;
 }
 
-void CDmrmmdvmProtocol::EncodeMMDVMPacket(const CDvHeaderPacket &Header, const CDvFramePacket &DvFrame0, const CDvFramePacket &DvFrame1, const CDvFramePacket &DvFrame2, uint8_t seqid, CBuffer *Buffer) const
+void CDmrmmdvmProtocol::EncodeMMDVMPacket(const CDvHeaderPacket &Header, const CDvFramePacket &DvFrame0, const CDvFramePacket &DvFrame1, const CDvFramePacket &DvFrame2, uint8_t seqid, uint32_t dstId, uint8_t slot, CBuffer *Buffer) const
 {
 	uint8_t tag[] = { 'D','M','R','D' };
 	Buffer->Set(tag, sizeof(tag));
@@ -918,15 +1224,14 @@ void CDmrmmdvmProtocol::EncodeMMDVMPacket(const CDvHeaderPacket &Header, const C
 	}
 
 	AppendDmrIdToBuffer(Buffer, uiSrcId);
-	// uiDstId = TG9
-	uint32_t uiDstId = 9; // ModuleToDmrDestId(Header.GetRpt2Module());
-	AppendDmrIdToBuffer(Buffer, uiDstId);
+	// uiDstId
+	AppendDmrIdToBuffer(Buffer, dstId);
 	// uiRptrId
 	uint32_t uiRptrId = Header.GetRpt1Callsign().GetDmrid();
 	AppendDmrRptrIdToBuffer(Buffer, uiRptrId);
 	// uiBitField
 	uint8_t uiBitField =
-		((DMRMMDVM_REFLECTOR_SLOT == DMR_SLOT2) ? 0x80 : 0x00);
+		((slot == 2) ? 0x80 : 0x00);
 	if ( DvFrame0.GetDmrPacketId() == 0 )
 	{
 		uiBitField |= (DMRMMDVM_FRAMETYPE_VOICESYNC << 4);
@@ -970,7 +1275,7 @@ void CDmrmmdvmProtocol::EncodeMMDVMPacket(const CDvHeaderPacket &Header, const C
 }
 
 
-void CDmrmmdvmProtocol::EncodeLastMMDVMPacket(const CDvHeaderPacket &Packet, uint8_t seqid, CBuffer *Buffer) const
+void CDmrmmdvmProtocol::EncodeLastMMDVMPacket(const CDvHeaderPacket &Packet, uint8_t seqid, uint32_t dstId, uint8_t slot, CBuffer *Buffer) const
 {
 	uint8_t tag[] = { 'D','M','R','D' };
 
@@ -981,17 +1286,19 @@ void CDmrmmdvmProtocol::EncodeLastMMDVMPacket(const CDvHeaderPacket &Packet, uin
 	Buffer->Append((uint8_t)seqid);
 	// uiSrcId
 	uint32_t uiSrcId = Packet.GetMyCallsign().GetDmrid();
+    // Fallback to default ID if source has none
+    if (uiSrcId == 0) uiSrcId = m_DefaultId;
+
 	AppendDmrIdToBuffer(Buffer, uiSrcId);
 	// uiDstId
-	uint32_t uiDstId = 9; //ModuleToDmrDestId(Packet.GetRpt2Module());
-	AppendDmrIdToBuffer(Buffer, uiDstId);
+	AppendDmrIdToBuffer(Buffer, dstId);
 	// uiRptrId
 	uint32_t uiRptrId = Packet.GetRpt1Callsign().GetDmrid();
 	AppendDmrRptrIdToBuffer(Buffer, uiRptrId);
 	// uiBitField
 	uint8_t uiBitField =
 		(DMRMMDVM_FRAMETYPE_DATASYNC << 4) |
-		((DMRMMDVM_REFLECTOR_SLOT == DMR_SLOT2) ? 0x80 : 0x00) |
+		((slot == 2) ? 0x80 : 0x00) |
 		MMDVM_SLOTTYPE_TERMINATOR;
 	Buffer->Append((uint8_t)uiBitField);
 	// uiStreamId
@@ -999,7 +1306,7 @@ void CDmrmmdvmProtocol::EncodeLastMMDVMPacket(const CDvHeaderPacket &Packet, uin
 	Buffer->Append((uint32_t)uiStreamId);
 
 	// Payload
-	AppendTerminatorLCToBuffer(Buffer, uiSrcId);
+	AppendTerminatorLCToBuffer(Buffer, uiSrcId, dstId);
 
 	// BER
 	Buffer->Append((uint8_t)0);
@@ -1014,13 +1321,39 @@ void CDmrmmdvmProtocol::EncodeLastMMDVMPacket(const CDvHeaderPacket &Packet, uin
 
 char CDmrmmdvmProtocol::DmrDstIdToModule(uint32_t tg) const
 {
-	// is it a 4xxx ?
-	if (tg > 4000 && tg < 4027)
+	if (g_Configure.GetBoolean(g_Keys.dmr.xlx))
 	{
-		const char mod = 'A' + (tg - 4001U);
-		if (g_Reflector.IsValidModule(mod))
+		// Legacy XLX Mode
+		if (tg > 4000 && tg < 4027)
 		{
-			return mod;
+			const char mod = 'A' + (tg - 4001U);
+			if (g_Reflector.IsValidModule(mod))
+			{
+				return mod;
+			}
+		}
+	}
+	else
+	{
+		// Mini DMR Mode - Reverse Lookup
+		// Iterate A-Z and check map
+		for (char c = 'A'; c <= 'Z'; c++)
+		{
+			std::string key = g_Keys.dmr.map_prefix + c;
+			if (g_Configure.Contains(key))
+			{
+				if (g_Configure.GetUnsigned(key) == tg)
+					return c;
+			}
+			else
+			{
+				// Default Mapping check
+				// If no map entry, assume default 4001-4026?
+				// User said "allows custom mapping... default mapping A=4001... should be supported".
+				// So if key missing, fallback to default?
+				if (tg == (uint32_t)(4001 + (c - 'A')))
+					return c;
+			}
 		}
 	}
 	return ' ';
@@ -1028,13 +1361,27 @@ char CDmrmmdvmProtocol::DmrDstIdToModule(uint32_t tg) const
 
 uint32_t CDmrmmdvmProtocol::ModuleToDmrDestId(char m) const
 {
-	return (uint32_t)(m - 'A')+4001;
+	if (g_Configure.GetBoolean(g_Keys.dmr.xlx))
+	{
+		return (uint32_t)(m - 'A')+4001;
+	}
+	else
+	{
+		// Mini DMR Mode - Forward Lookup
+		std::string key = g_Keys.dmr.map_prefix + m;
+		if (g_Configure.Contains(key))
+		{
+			return g_Configure.GetUnsigned(key);
+		}
+		// Default fallback
+		return (uint32_t)(m - 'A')+4001;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Buffer & LC helpers
 
-void CDmrmmdvmProtocol::AppendVoiceLCToBuffer(CBuffer *buffer, uint32_t uiSrcId) const
+void CDmrmmdvmProtocol::AppendVoiceLCToBuffer(CBuffer *buffer, uint32_t uiSrcId, uint32_t uiDstId) const
 {
 	uint8_t payload[33];
 
@@ -1045,8 +1392,10 @@ void CDmrmmdvmProtocol::AppendVoiceLCToBuffer(CBuffer *buffer, uint32_t uiSrcId)
 	uint8_t lc[12];
 	{
 		memset(lc, 0, sizeof(lc));
-		// uiDstId = TG9
-		lc[5] = 9;
+		// uiDstId
+		lc[3] = (uint8_t)LOBYTE(HIWORD(uiDstId));
+		lc[4] = (uint8_t)HIBYTE(LOWORD(uiDstId));
+		lc[5] = (uint8_t)LOBYTE(LOWORD(uiDstId));
 		// uiSrcId
 		lc[6] = (uint8_t)LOBYTE(HIWORD(uiSrcId));
 		lc[7] = (uint8_t)HIBYTE(LOWORD(uiSrcId));
@@ -1081,7 +1430,7 @@ void CDmrmmdvmProtocol::AppendVoiceLCToBuffer(CBuffer *buffer, uint32_t uiSrcId)
 	buffer->Append(payload, sizeof(payload));
 }
 
-void CDmrmmdvmProtocol::AppendTerminatorLCToBuffer(CBuffer *buffer, uint32_t uiSrcId) const
+void CDmrmmdvmProtocol::AppendTerminatorLCToBuffer(CBuffer *buffer, uint32_t uiSrcId, uint32_t uiDstId) const
 {
 	uint8_t payload[33];
 
@@ -1092,8 +1441,10 @@ void CDmrmmdvmProtocol::AppendTerminatorLCToBuffer(CBuffer *buffer, uint32_t uiS
 	uint8_t lc[12];
 	{
 		memset(lc, 0, sizeof(lc));
-		// uiDstId = TG9
-		lc[5] = 9;
+		// uiDstId
+		lc[3] = (uint8_t)LOBYTE(HIWORD(uiDstId));
+		lc[4] = (uint8_t)HIBYTE(LOWORD(uiDstId));
+		lc[5] = (uint8_t)LOBYTE(LOWORD(uiDstId));
 		// uiSrcId
 		lc[6] = (uint8_t)LOBYTE(HIWORD(uiSrcId));
 		lc[7] = (uint8_t)HIBYTE(LOWORD(uiSrcId));

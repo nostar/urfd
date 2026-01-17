@@ -57,6 +57,9 @@ public:
 	uint8_t      GetYsfPacketId(void) const      { return m_uiYsfPacketId; }
 	uint8_t      GetYsfPacketSubId(void) const   { return m_uiYsfPacketSubId; }
 	uint8_t      GetYsfPacketFrameId(void) const { return m_uiYsfPacketFrameId; }
+	uint8_t      GetImrsPacketId(void) const      { return m_uiImrsPacketId; }
+	uint8_t      GetImrsPacketSubId(void) const   { return m_uiImrsPacketSubId; }
+	uint8_t      GetImrsPacketFrameId(void) const { return m_uiImrsPacketFrameId; }
 	uint8_t      GetNXDNPacketId(void) const     { return m_uiNXDNPacketId; }
 	char         GetPacketModule(void) const     { return m_cModule; }
 	bool         IsLocalOrigin(void) const       { return (m_eOrigin == EOrigin::local); }
@@ -64,17 +67,19 @@ public:
 
 	// set
 	void UpdatePids(const uint32_t);
-	void SetPacketModule(char cMod) { m_cModule = cMod; }
-	void SetLastPacket(bool value)  { m_bLastPacket = value; }
-	void SetLocalOrigin(void)       { m_eOrigin = EOrigin::local; }
-	void SetRemotePeerOrigin(void)  { m_eOrigin = EOrigin::peer; }
+	void SetPacketModule(char cMod)    { m_cModule = cMod; }
+	void SetLastPacket(bool value)     { m_bLastPacket = value; }
+	void SetLocalOrigin(void)          { m_eOrigin = EOrigin::local; }
+	void SetRemotePeerOrigin(void)     { m_eOrigin = EOrigin::peer; }
+	void SetImrsPacketFrameId(uint8_t id) { m_uiImrsPacketFrameId = id; }
+	void SetCodecIn(ECodecType type)   { m_eCodecIn = type; }
 
 protected:
 	// network
 	void EncodeInterlinkPacket(const char *magic, CBuffer &Buffer) const;
 	static constexpr unsigned GetNetworkSize() noexcept
 	{
-		return 4u + sizeof(ECodecType) + sizeof(EOrigin) + sizeof(bool) + sizeof(char) + sizeof(uint16_t) + sizeof(uint32_t) + 7u * sizeof(uint8_t);
+		return 4u + sizeof(ECodecType) + sizeof(EOrigin) + sizeof(bool) + sizeof(char) + sizeof(uint16_t) + sizeof(uint32_t) + 10u * sizeof(uint8_t);
 	}
 
 	// data
@@ -91,5 +96,8 @@ protected:
 	uint8_t    m_uiYsfPacketId;
 	uint8_t    m_uiYsfPacketSubId;
 	uint8_t    m_uiYsfPacketFrameId;
+	uint8_t    m_uiImrsPacketId;
+	uint8_t    m_uiImrsPacketSubId;
+	uint8_t    m_uiImrsPacketFrameId;
 	uint8_t    m_uiNXDNPacketId;
 };
