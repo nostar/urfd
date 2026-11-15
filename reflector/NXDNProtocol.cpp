@@ -102,6 +102,17 @@ void CNXDNProtocol::Task(void)
 			OnDvFramePacketIn(Frames[1], &Ip);
 			OnDvFramePacketIn(Frames[2], &Ip);
 			OnDvFramePacketIn(Frames[3], &Ip);
+			// end of transmission flagged in byte 9 (bit 0x08), as sent by
+			// NXDNGateway/MMDVMHost: close the stream with a last packet so the
+			// other protocols send their terminator instead of timing out
+			if ( (Buffer.data()[9U] & 0x08U) && (m_uiStreamId != 0) )
+			{
+				uint8_t ambe[9];
+				memset(ambe, 0x00, sizeof(ambe));
+				auto last = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(ambe, m_uiStreamId, 0, true));
+				OnDvFramePacketIn(last, &Ip);
+				m_uiStreamId = 0;
+			}
 		}
 		else if ( IsValidDvHeaderPacket(Ip, Buffer, Header) )
 		{
@@ -114,6 +125,13 @@ void CNXDNProtocol::Task(void)
 		}
 		else if ( IsValidDvLastFramePacket(Ip, Buffer) )
 		{
+			if ( m_uiStreamId != 0 )
+			{
+				uint8_t ambe[9];
+				memset(ambe, 0x00, sizeof(ambe));
+				auto last = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(ambe, m_uiStreamId, 0, true));
+				OnDvFramePacketIn(last, &Ip);
+			}
 			m_uiStreamId = 0;
 		}
 		else if ( IsValidConnectPacket(Buffer, &Callsign) )
