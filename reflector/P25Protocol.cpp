@@ -352,14 +352,17 @@ bool CP25Protocol::IsValidDvPacket(const CIp &Ip, const CBuffer &Buffer, std::un
 			offset = 4U;
 			break;
 		case 0x80U:
+			// terminator: reset the stream id AFTER building the last packet,
+			// otherwise it gets id 0, is dropped as orphaned and the stream times out
 			last = true;
-			m_uiStreamId = 0;
 			break;
 		default:
 			break;
 		}
 
 		frame = std::unique_ptr<CDvFramePacket>(new CDvFramePacket(&(Buffer.data()[offset]), m_uiStreamId, last));
+		if ( last )
+			m_uiStreamId = 0;
 		return true;
 	}
 	return false;
